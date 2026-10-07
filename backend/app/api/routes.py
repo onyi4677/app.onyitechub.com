@@ -154,6 +154,17 @@ def create_project(payload: ProjectCreateRequest) -> dict:
     return {"id": project_id, "status": "created", "project": project}
 
 
+@router.get("/projects")
+def list_projects() -> dict[str, Any]:
+    try:
+        response = projects_table.scan()
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to list projects") from exc
+    projects = response.get("Items", [])
+    projects.sort(key=lambda item: item.get("updated_at", item.get("id", "")), reverse=True)
+    return {"projects": projects}
+
+
 @router.get("/projects/{project_id}")
 def get_project(project_id: str) -> dict:
     try:
