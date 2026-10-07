@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import Nav from "../../../../../components/nav";
 import WorkspaceSidebar from "../../../../../components/workspace/workspace-sidebar";
 import ResearchFoundationEditor from "../../../../../components/workspace/research-foundation-editor";
+import LiteratureEvidenceEditor from "../../../../../components/workspace/literature-evidence-editor";
 import { getModules, getProject, getProjectModule, ResearchModule } from "../../../../../lib/api";
 import type { Project } from "../../../../../lib/types";
 
@@ -50,6 +51,8 @@ export default function ModulePage() {
             </div>
             {module === "research_foundation" ? (
               <ResearchFoundationEditor project={project} projectId={project.id} />
+            ) : module === "literature_evidence" ? (
+              <LiteratureEvidenceEditor projectId={project.id} />
             ) : (
             <div className="card module-workspace">
               <div className="module-placeholder">
