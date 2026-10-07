@@ -25,6 +25,11 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "onyitech-research-api"}
 
 
+@router.get("/modules/research-foundation/spec")
+def research_foundation_spec() -> dict[str, Any]:
+    return get_research_foundation_spec()
+
+
 @router.post("/analyze")
 def analyze(request: AnalyzeRequest) -> dict:
     return analyze_idea(request.text)
