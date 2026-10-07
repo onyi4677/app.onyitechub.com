@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Nav from "../../../../../components/nav";
 import WorkspaceSidebar from "../../../../../components/workspace/workspace-sidebar";
+import ResearchFoundationEditor from "../../../../../components/workspace/research-foundation-editor";
 import { getModules, getProject, getProjectModule, ResearchModule } from "../../../../../lib/api";
 import type { Project } from "../../../../../lib/types";
 
@@ -47,6 +48,9 @@ export default function ModulePage() {
               </div>
               <Link className="button" href={`/projects/${project.id}`}>Workspace overview</Link>
             </div>
+            {module === "research_foundation" ? (
+              <ResearchFoundationEditor project={project} projectId={project.id} />
+            ) : (
             <div className="card module-workspace">
               <div className="module-placeholder">
                 <div className="eyebrow">{definition.status === "active" ? "Research module" : "Planned module"}</div>
@@ -61,6 +65,7 @@ export default function ModulePage() {
                 )}
               </div>
             </div>
+            )}
           </section>
         </div>
       </main>
