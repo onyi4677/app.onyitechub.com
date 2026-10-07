@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: lambda-deployment
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -47,20 +51,29 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Deploy to Lambda
+      - name: Deploy to Lambda with retry
+        shell: bash
         run: |
-          aws lambda update-function-code \
-            --function-name onyitech-research-api \
-            --zip-file fileb://lambda-deployment.zip
+          set -e
+          for attempt in 1 2 3 4 5; do
+            echo "Lambda deployment attempt $attempt/5"
+            if aws lambda update-function-code               --function-name onyitech-research-api               --zip-file fileb://lambda-deployment.zip; then
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 5 ]; then
+              echo "Lambda is busy; waiting 15 seconds before retry..."
+              sleep 15
+            fi
+          done
+
+          echo "Lambda deployment failed after 5 attempts."
+          exit 1
 
       - name: Wait for Lambda update
         run: |
-          aws lambda wait function-updated \
-            --function-name onyitech-research-api
+          aws lambda wait function-updated             --function-name onyitech-research-api
 
       - name: Confirm deployment
         run: |
-          aws lambda get-function-configuration \
-            --function-name onyitech-research-api \
-            --query '{FunctionName:FunctionName,Runtime:Runtime,Handler:Handler,LastModified:LastModified,CodeSize:CodeSize}' \
-            --output table
+          aws lambda get-function-configuration             --function-name onyitech-research-api             --query '{FunctionName:FunctionName,Runtime:Runtime,Handler:Handler,LastModified:LastModified,CodeSize:CodeSize}'             --output table
