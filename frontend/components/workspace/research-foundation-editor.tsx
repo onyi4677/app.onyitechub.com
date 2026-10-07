@@ -51,6 +51,7 @@ export default function ResearchFoundationEditor({ project, projectId }: { proje
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     getProjectModule(projectId, "research_foundation")
@@ -72,6 +73,7 @@ export default function ResearchFoundationEditor({ project, projectId }: { proje
 
   const validate = () => {
     const next: string[] = [];
+    const nextWarnings: string[] = [];
     if (!form.title.trim()) next.push("Research title is required.");
     if (!form.aim.trim()) next.push("Research aim is required.");
     if (!form.objectives.some(Boolean)) next.push("Add at least one research objective.");
@@ -80,7 +82,19 @@ export default function ResearchFoundationEditor({ project, projectId }: { proje
     form.variables.forEach((v, i) => {
       if (v.name.trim() && !v.operational_definition.trim()) next.push("Variable " + (i + 1) + " needs an operational definition.");
     });
+    const objectiveCount = form.objectives.filter((x) => x.trim()).length;
+    const questionCount = form.research_questions.filter((x) => x.trim()).length;
+    if (objectiveCount !== questionCount) {
+      nextWarnings.push("The number of objectives and research questions differs. Review their one-to-one alignment.");
+    }
+    if (form.hypotheses.some((x) => x.trim()) && form.hypotheses.filter((x) => x.trim()).length > objectiveCount) {
+      nextWarnings.push("You have more hypotheses than objectives. Confirm that each hypothesis is justified by the study objectives.");
+    }
+    if (!form.conceptual_framework.description.trim()) {
+      nextWarnings.push("A conceptual framework has not yet been described.");
+    }
     setErrors(next);
+    setWarnings(nextWarnings);
     return next.length === 0;
   };
 
@@ -140,14 +154,17 @@ export default function ResearchFoundationEditor({ project, projectId }: { proje
 
       <div className="card editor-section">
         <div className="eyebrow">Evidence gap</div>
-        <textarea rows={4} value={form.evidence_gap} onChange={(e) => update("evidence_gap", e.target.value)} placeholder="Populate this from verified Literature & Evidence. Do not invent a research gap." />
+        <textarea rows={4} value={form.evidence_gap} onChange={(e) => update("evidence_gap", e.target.value)} placeholder="This will be populated from verified Literature & Evidence. Do not invent a research gap." />
+        <p className="muted">The Literature & Evidence module will become the source of truth for this field.</p>
       </div>
 
+      {warnings.length > 0 && <div className="notice warning"><strong>Review before proceeding</strong>{warnings.map((e) => <div key={e}>{e}</div>)}</div>}
       {errors.length > 0 && <div className="notice">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
       {message && <div className="notice">{message}</div>}
       <div className="editor-actions">
         <button className="button" type="button" disabled={saving} onClick={() => save("in_progress")}>{saving ? "Saving..." : "Save foundation"}</button>
         <button className="button secondary" type="button" disabled={saving} onClick={() => save("review_required")}>Save for review</button>
+        <button className="button secondary" type="button" disabled={saving} onClick={() => save("complete")}>Mark foundation complete</button>
       </div>
     </div>
   );
