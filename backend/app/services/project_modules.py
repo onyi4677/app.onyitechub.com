@@ -4,7 +4,7 @@ from typing import Any
 from botocore.exceptions import ClientError
 from fastapi import HTTPException
 
-from app.api.routes import projects_table
+from app.db import projects_table
 
 
 def _now() -> str:
