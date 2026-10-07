@@ -1,5 +1,8 @@
 from uuid import uuid4
+import os
 
+import boto3
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -7,7 +10,9 @@ from app.services.analysis import analyze_idea
 
 router = APIRouter(prefix="/api")
 
-projects: dict[str, dict] = {}
+DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "onyitech-research-projects")
+dynamodb = boto3.resource("dynamodb")
+projects_table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
 
 class AnalyzeRequest(BaseModel):
@@ -40,13 +45,24 @@ def create_project(payload: ProjectCreateRequest) -> dict:
         "discipline": payload.discipline,
         "status": "draft",
     }
-    projects[project_id] = project
+
+    try:
+        projects_table.put_item(Item=project)
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to save project") from exc
+
     return {"id": project_id, "status": "created", "project": project}
 
 
 @router.get("/projects/{project_id}")
 def get_project(project_id: str) -> dict:
-    project = projects.get(project_id)
+    try:
+        response = projects_table.get_item(Key={"id": project_id})
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
+
+    project = response.get("Item")
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
     return {"project": project}
