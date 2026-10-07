@@ -1,7 +1,5 @@
 from uuid import uuid4
-import os
 
-import boto3
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -10,9 +8,6 @@ from app.services.analysis import analyze_idea
 
 router = APIRouter(prefix="/api")
 
-DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "onyitech-research-projects")
-dynamodb = boto3.resource("dynamodb")
-projects_table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
 
 class AnalyzeRequest(BaseModel):
