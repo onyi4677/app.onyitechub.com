@@ -1,0 +1,66 @@
+name: Deploy Backend to AWS Lambda
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-lambda.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          mkdir -p build
+          pip install -r backend/requirements.txt -t build
+
+      - name: Copy application code
+        run: |
+          cp -R backend/app build/app
+
+      - name: Create Lambda deployment package
+        run: |
+          cd build
+          zip -r ../lambda-deployment.zip .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name onyitech-research-api \
+            --zip-file fileb://lambda-deployment.zip
+
+      - name: Wait for Lambda update
+        run: |
+          aws lambda wait function-updated \
+            --function-name onyitech-research-api
+
+      - name: Confirm deployment
+        run: |
+          aws lambda get-function-configuration \
+            --function-name onyitech-research-api \
+            --query '{FunctionName:FunctionName,Runtime:Runtime,Handler:Handler,LastModified:LastModified,CodeSize:CodeSize}' \
+            --output table
