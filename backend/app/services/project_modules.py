@@ -21,20 +21,13 @@ def save_module(project_id: str, module_key: str, content: dict[str, Any]) -> di
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    modules = dict(project.get("modules") or {})
+    modules[module_key] = content
+    project["modules"] = modules
+    project["updated_at"] = _now()
+
     try:
-        projects_table.update_item(
-            Key={"id": project_id},
-            UpdateExpression="SET #modules.#module = :content, #updated = :updated",
-            ExpressionAttributeNames={
-                "#modules": "modules",
-                "#module": module_key,
-                "#updated": "updated_at",
-            },
-            ExpressionAttributeValues={
-                ":content": content,
-                ":updated": _now(),
-            },
-        )
+        projects_table.put_item(Item=project)
     except ClientError as exc:
         raise HTTPException(status_code=500, detail="Unable to save research module") from exc
 
