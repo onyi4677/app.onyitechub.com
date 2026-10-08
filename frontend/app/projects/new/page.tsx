@@ -73,7 +73,7 @@ export default function NewProject() {
           </div>
 
           <div className="notice">
-            Prototype storage is currently in backend memory. DynamoDB will replace this layer later.
+            Your project is stored in the research workspace backend and can be developed across the connected research modules.
           </div>
         </form>
       </main>
