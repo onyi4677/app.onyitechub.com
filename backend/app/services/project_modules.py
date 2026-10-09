@@ -6,46 +6,80 @@ from fastapi import HTTPException
 
 from app.db import projects_table
 
-
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+return datetime.now(timezone.utc).isoformat()
 
+def save_module(
+project_id: str,
+module_key: str,
+content: dict[str, Any],
+) -> dict[str, Any]:
+try:
+response = projects_table.get_item(
+Key={"id": project_id}
+)
+except ClientError as exc:
+raise HTTPException(
+status_code=500,
+detail="Unable to retrieve project",
+) from exc
 
-def save_module(project_id: str, module_key: str, content: dict[str, Any]) -> dict[str, Any]:
-    try:
-        response = projects_table.get_item(Key={"id": project_id})
-    except ClientError as exc:
-        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
+```
+project = response.get("Item")
 
-    project = response.get("Item")
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+if not project:
+    raise HTTPException(
+        status_code=404,
+        detail="Project not found",
+    )
 
-    modules = dict(project.get("modules") or {})
-    modules[module_key] = content
-    project["modules"] = modules
-    project["updated_at"] = _now()
+modules = dict(project.get("modules") or {})
+modules[module_key] = content
 
-    try:
-        projects_table.put_item(Item=project)
-    except ClientError as exc:
-        raise HTTPException(status_code=500, detail="Unable to save research module") from exc
+project["modules"] = modules
+project["updated_at"] = _now()
 
-    return content
+try:
+    projects_table.put_item(Item=project)
+except ClientError as exc:
+    raise HTTPException(
+        status_code=500,
+        detail="Unable to save research module",
+    ) from exc
 
+return content
+```
 
-def get_module(project_id: str, module_key: str) -> dict[str, Any]:
-    try:
-        response = projects_table.get_item(Key={"id": project_id})
-    except ClientError as exc:
-        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
+def get_module(
+project_id: str,
+module_key: str,
+) -> dict[str, Any]:
+try:
+response = projects_table.get_item(
+Key={"id": project_id}
+)
+except ClientError as exc:
+raise HTTPException(
+status_code=500,
+detail="Unable to retrieve project",
+) from exc
 
-    project = response.get("Item")
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+```
+project = response.get("Item")
 
-    module = (project.get("modules") or {}).get(module_key)
-    if module is None:
-        raise HTTPException(status_code=404, detail="Research module not found")
+if not project:
+    raise HTTPException(
+        status_code=404,
+        detail="Project not found",
+    )
 
-    return module
+modules = project.get("modules") or {}
+module = modules.get(module_key)
+
+# A valid project may not have saved content for this module yet.
+# Return an empty object so the frontend can open a blank workspace.
+if module is None:
+    return {}
+
+return module
+```
