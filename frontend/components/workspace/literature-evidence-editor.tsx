@@ -1,36 +1,668 @@
 "use client";
-import {useEffect,useState} from "react";
-import {addEvidenceItem,addLiteratureClaim,addLiteratureSource,getLiteratureWorkspace,saveLiteratureWorkspace,type LiteratureClaim,type LiteratureSource,type EvidenceItem} from "../../lib/api/literature";
 
-const emptySource=()=>({authors:[""],year:new Date().getFullYear(),title:"",source_type:"journal_article",journal_or_publisher:"",volume:"",issue:"",pages:"",doi:"",url:"",abstract:"",keywords:[],verified:false});
-const emptyEvidence=()=>({source_id:"",finding:"",population:"",setting:"",method:"",sample_size:null as number|null,limitations:[],notes:""});
-const emptyClaim=()=>({text:"",evidence_ids:[] as string[],source_ids:[] as string[],confidence:"moderate"});
+import { useEffect, useState } from "react";
+import {
+  addEvidenceItem,
+  addLiteratureClaim,
+  addLiteratureSource,
+  getLiteratureWorkspace,
+  saveLiteratureWorkspace,
+  type LiteratureClaim,
+  type LiteratureSource,
+  type LiteratureSourceInput,
+  type EvidenceItem,
+} from "../../lib/api/literature";
 
-export default function LiteratureEvidenceEditor({projectId}:{projectId:string}){
- const [sources,setSources]=useState<LiteratureSource[]>([]),[evidence,setEvidence]=useState<EvidenceItem[]>([]),[claims,setClaims]=useState<LiteratureClaim[]>([]),[synthesis,setSynthesis]=useState(""),[gap,setGap]=useState(""),[source,setSource]=useState(emptySource()),[ev,setEv]=useState(emptyEvidence()),[claim,setClaim]=useState(emptyClaim()),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[message,setMessage]=useState("");
- async function load(){try{const w=await getLiteratureWorkspace(projectId);setSources(w.sources);setEvidence(w.evidence_items);setClaims(w.claims);setSynthesis(w.synthesis);setGap(w.research_gap)}catch(e){setMessage(e instanceof Error?e.message:"Could not load Literature & Evidence.")}finally{setLoading(false)}} useEffect(()=>{load()},[projectId]);
- async function addSource(){if(!source.title.trim())return setMessage("Source title is required.");if(!source.authors.some(a=>a.trim()))return setMessage("Add at least one author.");setSaving(true);try{const r=await addLiteratureSource(projectId,{...source,authors:source.authors.filter(Boolean)});setSources(x=>[...x,r.source]);setSource(emptySource());setMessage("Source added. Verify it before using it as evidence.")}catch(e){setMessage(e instanceof Error?e.message:"Could not add source.")}finally{setSaving(false)}}
- async function addEv(){if(!ev.source_id)return setMessage("Select the supporting source.");if(!ev.finding.trim())return setMessage("Evidence finding is required.");setSaving(true);try{const r=await addEvidenceItem(projectId,{...ev,limitations:ev.limitations.filter(Boolean)});setEvidence(x=>[...x,r.evidence]);setEv(emptyEvidence());setMessage("Evidence item added.")}catch(e){setMessage(e instanceof Error?e.message:"Could not add evidence.")}finally{setSaving(false)}}
- async function addClaim(){if(!claim.text.trim())return setMessage("Claim text is required.");if(!claim.evidence_ids.length&&!claim.source_ids.length)return setMessage("Link the claim to evidence or a source.");setSaving(true);try{const r=await addLiteratureClaim(projectId,claim);setClaims(x=>[...x,r.claim]);setClaim(emptyClaim());setMessage("Evidence-backed claim added.")}catch(e){setMessage(e instanceof Error?e.message:"Could not add claim.")}finally{setSaving(false)}}
- async function save(){setSaving(true);try{await saveLiteratureWorkspace(projectId,{sources,evidence_items:evidence,claims,research_gap:gap,synthesis});setMessage("Synthesis and research gap saved.")}catch(e){setMessage(e instanceof Error?e.message:"Save failed.")}finally{setSaving(false)}}
- if(loading)return <div className="card module-workspace"><p>Loading Literature & Evidence...</p></div>;
- return <div className="module-editor literature-editor">
-  <div className="notice"><strong>Evidence provenance</strong><p>Source → verified evidence → claim → synthesis → research gap. Do not add invented sources, findings, quotations or study results.</p></div>
-  <div className="card editor-section"><div className="eyebrow">1. Literature sources</div>
-   <label>Authors (one per line)<textarea rows={3} value={source.authors.join("\n")} onChange={e=>setSource({...source,authors:e.target.value.split("\n")})}/></label>
-   <label>Title<input value={source.title} onChange={e=>setSource({...source,title:e.target.value})}/></label>
-   <div className="form-grid"><label>Year<input type="number" value={source.year||""} onChange={e=>setSource({...source,year:e.target.value?Number(e.target.value):null})}/></label><label>Source type<select value={source.source_type} onChange={e=>setSource({...source,source_type:e.target.value})}><option value="journal_article">Journal article</option><option value="book">Book</option><option value="report">Report</option><option value="thesis">Thesis/Dissertation</option><option value="web">Web/Institutional source</option></select></label></div>
-   <label>Journal / publisher<input value={source.journal_or_publisher||""} onChange={e=>setSource({...source,journal_or_publisher:e.target.value})}/></label><div className="form-grid"><label>Volume<input value={source.volume||""} onChange={e=>setSource({...source,volume:e.target.value})}/></label><label>Issue<input value={source.issue||""} onChange={e=>setSource({...source,issue:e.target.value})}/></label><label>Pages<input value={source.pages||""} onChange={e=>setSource({...source,pages:e.target.value})}/></label></div>
-   <label>DOI<input value={source.doi||""} onChange={e=>setSource({...source,doi:e.target.value})}/></label><label>URL<input value={source.url||""} onChange={e=>setSource({...source,url:e.target.value})}/></label><label>Abstract<textarea rows={5} value={source.abstract||""} onChange={e=>setSource({...source,abstract:e.target.value})}/></label>
-   <label className="check"><input type="checkbox" checked={source.verified} onChange={e=>setSource({...source,verified:e.target.checked})}/> I have verified this source and its metadata.</label><button className="button" type="button" disabled={saving} onClick={addSource}>Add source</button>
-  </div>
-  <div className="card editor-section"><div className="eyebrow">2. Evidence extraction</div><label>Source<select value={ev.source_id} onChange={e=>setEv({...ev,source_id:e.target.value})}><option value="">Select a source</option>{sources.map(s=><option key={s.source_id} value={s.source_id}>{s.authors.join(", ")} ({s.year||"n.d."}) — {s.title}</option>)}</select></label>
-   <label>Finding / result<textarea rows={5} value={ev.finding} onChange={e=>setEv({...ev,finding:e.target.value})} placeholder="Record what the source actually reports."/></label><div className="form-grid"><label>Population<input value={ev.population||""} onChange={e=>setEv({...ev,population:e.target.value})}/></label><label>Setting<input value={ev.setting||""} onChange={e=>setEv({...ev,setting:e.target.value})}/></label><label>Sample size<input type="number" value={ev.sample_size||""} onChange={e=>setEv({...ev,sample_size:e.target.value?Number(e.target.value):null})}/></label></div>
-   <label>Method<input value={ev.method||""} onChange={e=>setEv({...ev,method:e.target.value})}/></label><label>Limitations<textarea rows={3} value={ev.limitations.join("\n")} onChange={e=>setEv({...ev,limitations:e.target.value.split("\n")})}/></label><button className="button" type="button" disabled={saving} onClick={addEv}>Add evidence</button>
-  </div>
-  <div className="card editor-section"><div className="eyebrow">3. Evidence-backed claims</div><label>Claim<textarea rows={4} value={claim.text} onChange={e=>setClaim({...claim,text:e.target.value})} placeholder="State a claim directly supported by the selected evidence."/></label><label>Evidence<select multiple value={claim.evidence_ids} onChange={e=>setClaim({...claim,evidence_ids:Array.from(e.target.selectedOptions,o=>o.value)})}>{evidence.map(e=><option key={e.evidence_id} value={e.evidence_id}>{e.finding.slice(0,120)}</option>)}</select></label><label>Confidence<select value={claim.confidence||""} onChange={e=>setClaim({...claim,confidence:e.target.value})}><option value="high">High</option><option value="moderate">Moderate</option><option value="low">Low</option></select></label><button className="button" type="button" disabled={saving} onClick={addClaim}>Add claim</button></div>
-  <div className="card editor-section"><div className="eyebrow">4. Synthesis & research gap</div><label>Evidence synthesis<textarea rows={7} value={synthesis} onChange={e=>setSynthesis(e.target.value)} placeholder="Synthesize patterns, agreements, contradictions, populations, methods and limitations."/></label><label>Research gap<textarea rows={6} value={gap} onChange={e=>setGap(e.target.value)} placeholder="State only a gap supported by the accumulated evidence."/></label><button className="button" type="button" disabled={saving} onClick={save}>{saving?"Saving...":"Save synthesis & gap"}</button></div>
-  <div className="card editor-section"><div className="eyebrow">Evidence map</div><div className="statrow"><div className="stat"><span>Sources</span><strong>{sources.length}</strong></div><div className="stat"><span>Evidence items</span><strong>{evidence.length}</strong></div><div className="stat"><span>Claims</span><strong>{claims.length}</strong></div></div>{sources.length>0&&<div className="notice">Verified sources: {sources.filter(s=>s.verified).length} / {sources.length}.</div>}</div>
-  {message&&<div className="notice">{message}</div>}
- </div>
+const emptySource = (): LiteratureSourceInput => ({
+  authors: [""],
+  year: new Date().getFullYear(),
+  title: "",
+  source_type: "journal_article",
+  journal_or_publisher: "",
+  volume: "",
+  issue: "",
+  pages: "",
+  doi: "",
+  url: "",
+  abstract: "",
+  keywords: [],
+  verified: false,
+});
+
+const emptyEvidence = () => ({
+  source_id: "",
+  finding: "",
+  population: "",
+  setting: "",
+  method: "",
+  sample_size: null as number | null,
+  limitations: [] as string[],
+  notes: "",
+});
+
+const emptyClaim = () => ({
+  text: "",
+  evidence_ids: [] as string[],
+  source_ids: [] as string[],
+  confidence: "moderate",
+});
+
+export default function LiteratureEvidenceEditor({
+  projectId,
+}: {
+  projectId: string;
+}) {
+  const [sources, setSources] = useState<LiteratureSource[]>([]);
+  const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  const [claims, setClaims] = useState<LiteratureClaim[]>([]);
+  const [synthesis, setSynthesis] = useState("");
+  const [gap, setGap] = useState("");
+  const [source, setSource] = useState<LiteratureSourceInput>(emptySource());
+  const [ev, setEv] = useState(emptyEvidence());
+  const [claim, setClaim] = useState(emptyClaim());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function load() {
+    try {
+      const w = await getLiteratureWorkspace(projectId);
+
+      setSources(w.sources);
+      setEvidence(w.evidence_items);
+      setClaims(w.claims);
+      setSynthesis(w.synthesis);
+      setGap(w.research_gap);
+    } catch (e) {
+      setMessage(
+        e instanceof Error
+          ? e.message
+          : "Could not load Literature & Evidence."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, [projectId]);
+
+  async function addSource() {
+    if (!source.title.trim()) {
+      return setMessage("Source title is required.");
+    }
+
+    if (!source.authors.some((a) => a.trim())) {
+      return setMessage("Add at least one author.");
+    }
+
+    setSaving(true);
+
+    try {
+      const r = await addLiteratureSource(projectId, {
+        ...source,
+        authors: source.authors.filter(Boolean),
+      });
+
+      setSources((x) => [...x, r.source]);
+      setSource(emptySource());
+      setMessage(
+        "Source added. Verify it before using it as evidence."
+      );
+    } catch (e) {
+      setMessage(
+        e instanceof Error ? e.message : "Could not add source."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addEv() {
+    if (!ev.source_id) {
+      return setMessage("Select the supporting source.");
+    }
+
+    if (!ev.finding.trim()) {
+      return setMessage("Evidence finding is required.");
+    }
+
+    setSaving(true);
+
+    try {
+      const r = await addEvidenceItem(projectId, {
+        ...ev,
+        limitations: ev.limitations.filter(Boolean),
+      });
+
+      setEvidence((x) => [...x, r.evidence]);
+      setEv(emptyEvidence());
+      setMessage("Evidence item added.");
+    } catch (e) {
+      setMessage(
+        e instanceof Error ? e.message : "Could not add evidence."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addClaim() {
+    if (!claim.text.trim()) {
+      return setMessage("Claim text is required.");
+    }
+
+    if (!claim.evidence_ids.length && !claim.source_ids.length) {
+      return setMessage("Link the claim to evidence or a source.");
+    }
+
+    setSaving(true);
+
+    try {
+      const r = await addLiteratureClaim(projectId, claim);
+
+      setClaims((x) => [...x, r.claim]);
+      setClaim(emptyClaim());
+      setMessage("Evidence-backed claim added.");
+    } catch (e) {
+      setMessage(
+        e instanceof Error ? e.message : "Could not add claim."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function save() {
+    setSaving(true);
+
+    try {
+      await saveLiteratureWorkspace(projectId, {
+        sources,
+        evidence_items: evidence,
+        claims,
+        research_gap: gap,
+        synthesis,
+      });
+
+      setMessage("Synthesis and research gap saved.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="card module-workspace">
+        <p>Loading Literature & Evidence...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="module-editor literature-editor">
+      <div className="notice">
+        <strong>Evidence provenance</strong>
+        <p>
+          Source → verified evidence → claim → synthesis → research gap.
+          Do not add invented sources, findings, quotations or study
+          results.
+        </p>
+      </div>
+
+      <div className="card editor-section">
+        <div className="eyebrow">1. Literature sources</div>
+
+        <label>
+          Authors (one per line)
+          <textarea
+            rows={3}
+            value={source.authors.join("\n")}
+            onChange={(e) =>
+              setSource({
+                ...source,
+                authors: e.target.value.split("\n"),
+              })
+            }
+          />
+        </label>
+
+        <label>
+          Title
+          <input
+            value={source.title}
+            onChange={(e) =>
+              setSource({
+                ...source,
+                title: e.target.value,
+              })
+            }
+          />
+        </label>
+
+        <div className="form-grid">
+          <label>
+            Year
+            <input
+              type="number"
+              value={source.year ?? ""}
+              onChange={(e) =>
+                setSource({
+                  ...source,
+                  year:
+                    e.target.value === ""
+                      ? null
+                      : Number(e.target.value),
+                })
+              }
+            />
+          </label>
+
+          <label>
+            Source type
+            <select
+              value={source.source_type}
+              onChange={(e) =>
+                setSource({
+                  ...source,
+                  source_type: e.target.value,
+                })
+              }
+            >
+              <option value="journal_article">
+                Journal article
+              </option>
+              <option value="book">Book</option>
+              <option value="report">Report</option>
+              <option value="thesis">
+                Thesis/Dissertation
+              </option>
+              <option value="web">
+                Web/Institutional source
+              </option>
+            </select>
+          </label>
+        </div>
+
+        <label>
+          Journal / publisher
+          <input
+            value={source.journal_or_publisher ?? ""}
+            onChange={(e) =>
+              setSource({
+                ...source,
+                journal_or_publisher: e.target.value,
+              })
+            }
+          />
+        </label>
+
+        <div className="form-grid">
+          <label>
+            Volume
+            <input
+              value={source.volume ?? ""}
+              onChange={(e) =>
+                setSource({
+                  ...source,
+                  volume: e.target.value,
+                })
+              }
+            />
+          </label>
+
+          <label>
+            Issue
+            <input
+              value={source.issue ?? ""}
+              onChange={(e) =>
+                setSource({
+                  ...source,
+                  issue: e.target.value,
+                })
+              }
+            />
+          </label>
+
+          <label>
+            Pages
+            <input
+              value={source.pages ?? ""}
+              onChange={(e) =>
+                setSource({
+                  ...source,
+                  pages: e.target.value,
+                })
+              }
+            />
+          </label>
+        </div>
+
+        <label>
+          DOI
+          <input
+            value={source.doi ?? ""}
+            onChange={(e) =>
+              setSource({
+                ...source,
+                doi: e.target.value,
+              })
+            }
+          />
+        </label>
+
+        <label>
+          URL
+          <input
+            value={source.url ?? ""}
+            onChange={(e) =>
+              setSource({
+                ...source,
+                url: e.target.value,
+              })
+            }
+          />
+        </label>
+
+        <label>
+          Abstract
+          <textarea
+            rows={5}
+            value={source.abstract ?? ""}
+            onChange={(e) =>
+              setSource({
+                ...source,
+                abstract: e.target.value,
+              })
+            }
+          />
+        </label>
+
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={source.verified}
+            onChange={(e) =>
+              setSource({
+                ...source,
+                verified: e.target.checked,
+              })
+            }
+          />{" "}
+          I have verified this source and its metadata.
+        </label>
+
+        <button
+          className="button"
+          type="button"
+          disabled={saving}
+          onClick={addSource}
+        >
+          Add source
+        </button>
+      </div>
+
+      <div className="card editor-section">
+        <div className="eyebrow">2. Evidence extraction</div>
+
+        <label>
+          Source
+          <select
+            value={ev.source_id}
+            onChange={(e) =>
+              setEv({
+                ...ev,
+                source_id: e.target.value,
+              })
+            }
+          >
+            <option value="">Select a source</option>
+
+            {sources.map((s) => (
+              <option key={s.source_id} value={s.source_id}>
+                {s.authors.join(", ")} ({s.year ?? "n.d."}) —{" "}
+                {s.title}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Finding / result
+          <textarea
+            rows={5}
+            value={ev.finding}
+            onChange={(e) =>
+              setEv({
+                ...ev,
+                finding: e.target.value,
+              })
+            }
+            placeholder="Record what the source actually reports."
+          />
+        </label>
+
+        <div className="form-grid">
+          <label>
+            Population
+            <input
+              value={ev.population}
+              onChange={(e) =>
+                setEv({
+                  ...ev,
+                  population: e.target.value,
+                })
+              }
+            />
+          </label>
+
+          <label>
+            Setting
+            <input
+              value={ev.setting}
+              onChange={(e) =>
+                setEv({
+                  ...ev,
+                  setting: e.target.value,
+                })
+              }
+            />
+          </label>
+
+          <label>
+            Sample size
+            <input
+              type="number"
+              value={ev.sample_size ?? ""}
+              onChange={(e) =>
+                setEv({
+                  ...ev,
+                  sample_size:
+                    e.target.value === ""
+                      ? null
+                      : Number(e.target.value),
+                })
+              }
+            />
+          </label>
+        </div>
+
+        <label>
+          Method
+          <input
+            value={ev.method}
+            onChange={(e) =>
+              setEv({
+                ...ev,
+                method: e.target.value,
+              })
+            }
+          />
+        </label>
+
+        <label>
+          Limitations
+          <textarea
+            rows={3}
+            value={ev.limitations.join("\n")}
+            onChange={(e) =>
+              setEv({
+                ...ev,
+                limitations: e.target.value.split("\n"),
+              })
+            }
+          />
+        </label>
+
+        <button
+          className="button"
+          type="button"
+          disabled={saving}
+          onClick={addEv}
+        >
+          Add evidence
+        </button>
+      </div>
+
+      <div className="card editor-section">
+        <div className="eyebrow">3. Evidence-backed claims</div>
+
+        <label>
+          Claim
+          <textarea
+            rows={4}
+            value={claim.text}
+            onChange={(e) =>
+              setClaim({
+                ...claim,
+                text: e.target.value,
+              })
+            }
+            placeholder="State a claim directly supported by the selected evidence."
+          />
+        </label>
+
+        <label>
+          Evidence
+          <select
+            multiple
+            value={claim.evidence_ids}
+            onChange={(e) =>
+              setClaim({
+                ...claim,
+                evidence_ids: Array.from(
+                  e.target.selectedOptions,
+                  (o) => o.value
+                ),
+              })
+            }
+          >
+            {evidence.map((item) => (
+              <option
+                key={item.evidence_id}
+                value={item.evidence_id}
+              >
+                {item.finding.slice(0, 120)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Confidence
+          <select
+            value={claim.confidence || ""}
+            onChange={(e) =>
+              setClaim({
+                ...claim,
+                confidence: e.target.value,
+              })
+            }
+          >
+            <option value="high">High</option>
+            <option value="moderate">Moderate</option>
+            <option value="low">Low</option>
+          </select>
+        </label>
+
+        <button
+          className="button"
+          type="button"
+          disabled={saving}
+          onClick={addClaim}
+        >
+          Add claim
+        </button>
+      </div>
+
+      <div className="card editor-section">
+        <div className="eyebrow">
+          4. Synthesis & research gap
+        </div>
+
+        <label>
+          Evidence synthesis
+          <textarea
+            rows={7}
+            value={synthesis}
+            onChange={(e) => setSynthesis(e.target.value)}
+            placeholder="Synthesize patterns, agreements, contradictions, populations, methods and limitations."
+          />
+        </label>
+
+        <label>
+          Research gap
+          <textarea
+            rows={6}
+            value={gap}
+            onChange={(e) => setGap(e.target.value)}
+            placeholder="State only a gap supported by the accumulated evidence."
+          />
+        </label>
+
+        <button
+          className="button"
+          type="button"
+          disabled={saving}
+          onClick={save}
+        >
+          {saving ? "Saving..." : "Save synthesis & gap"}
+        </button>
+      </div>
+
+      <div className="card editor-section">
+        <div className="eyebrow">Evidence map</div>
+
+        <div className="statrow">
+          <div className="stat">
+            <span>Sources</span>
+            <strong>{sources.length}</strong>
+          </div>
+
+          <div className="stat">
+            <span>Evidence items</span>
+            <strong>{evidence.length}</strong>
+          </div>
+
+          <div className="stat">
+            <span>Claims</span>
+            <strong>{claims.length}</strong>
+          </div>
+        </div>
+
+        {sources.length > 0 && (
+          <div className="notice">
+            Verified sources:{" "}
+            {sources.filter((s) => s.verified).length} /{" "}
+            {sources.length}.
+          </div>
+        )}
+      </div>
+
+      {message && <div className="notice">{message}</div>}
+    </div>
+  );
 }
