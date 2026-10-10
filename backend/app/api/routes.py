@@ -170,6 +170,7 @@ def create_project(payload: ProjectCreateRequest, user: dict[str, Any] = Depends
     project_id = str(uuid4())
     project = {
         "id": project_id,
+        "owner_sub": user["sub"],
         "title": payload.title,
         "question": payload.question,
         "discipline": payload.discipline,
@@ -180,7 +181,7 @@ def create_project(payload: ProjectCreateRequest, user: dict[str, Any] = Depends
         projects_table.put_item(Item=project)
     except ClientError as exc:
         raise HTTPException(status_code=500, detail="Unable to save project") from exc
-    return {"id": project_id, "status": "created", "project": project}
+    return {"id": project_id, "status": "created", "project": _public_project(project)}
 
 
 @router.get("/projects")
