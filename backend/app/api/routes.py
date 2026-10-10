@@ -185,14 +185,26 @@ def create_project(payload: ProjectCreateRequest, user: dict[str, Any] = Depends
 
 
 @router.get("/projects")
-def list_projects() -> dict[str, Any]:
+def list_projects(user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
     try:
         response = projects_table.scan()
     except ClientError as exc:
         raise HTTPException(status_code=500, detail="Unable to list projects") from exc
     projects = response.get("Items", [])
-    projects.sort(key=lambda item: item.get("updated_at", item.get("id", "")), reverse=True)
-    return {"projects": projects}
+    founder_sub = os.getenv("FOUNDER_COGNITO_SUB", "")
+    visible = []
+    for project in projects:
+        if project.get("owner_sub") == user["sub"]:
+            visible.append(project)
+        elif not project.get("owner_sub") and founder_sub and user["sub"] == founder_sub:
+            project["owner_sub"] = user["sub"]
+            try:
+                projects_table.put_item(Item=project)
+                visible.append(project)
+            except ClientError as exc:
+                raise HTTPException(status_code=500, detail="Unable to secure legacy project") from exc
+    visible.sort(key=lambda item: item.get("updated_at", item.get("id", "")), reverse=True)
+    return {"projects": [_public_project(item) for item in visible]}
 
 
 @router.get("/projects/{project_id}")
