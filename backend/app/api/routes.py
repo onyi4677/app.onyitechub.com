@@ -1,10 +1,12 @@
+import os
 from typing import Any
 from uuid import uuid4
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.auth import require_user
 from app.db import projects_table
 from app.modules.literature_evidence import get_literature_evidence_spec
 from app.modules.references_citations import get_references_citations_spec
