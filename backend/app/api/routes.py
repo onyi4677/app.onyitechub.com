@@ -161,12 +161,12 @@ def references_citations_spec() -> dict[str, Any]:
 
 
 @router.post("/analyze")
-def analyze(request: AnalyzeRequest) -> dict:
+def analyze(request: AnalyzeRequest, user: dict[str, Any] = Depends(require_user)) -> dict:
     return analyze_idea(request.text)
 
 
 @router.post("/projects")
-def create_project(payload: ProjectCreateRequest) -> dict:
+def create_project(payload: ProjectCreateRequest, user: dict[str, Any] = Depends(require_user)) -> dict:
     project_id = str(uuid4())
     project = {
         "id": project_id,
