@@ -208,15 +208,9 @@ def list_projects(user: dict[str, Any] = Depends(require_user)) -> dict[str, Any
 
 
 @router.get("/projects/{project_id}")
-def get_project(project_id: str) -> dict:
-    try:
-        response = projects_table.get_item(Key={"id": project_id})
-    except ClientError as exc:
-        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
-    project = response.get("Item")
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return {"project": project}
+def get_project(project_id: str, user: dict[str, Any] = Depends(require_user)) -> dict:
+    project = _require_project_access(project_id, user)
+    return {"project": _public_project(project)}
 
 
 @router.get("/projects/{project_id}/modules/{module_key}")
