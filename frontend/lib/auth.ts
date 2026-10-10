@@ -1,7 +1,5 @@
 const COGNITO_DOMAIN = "https://us-east-170b0j8dwx.auth.us-east-1.amazoncognito.com";
 const CLIENT_ID = "1j3af1c5pitgj7c6r5k484jbiv";
-const CALLBACK_URL = "https://app.onyitechub.com/auth/callback";
-const LOGOUT_URL = "https://app.onyitechub.com/login";
 
 function randomString(length = 64): string {
   const bytes = new Uint8Array(length);
@@ -20,7 +18,12 @@ function base64Url(buffer: ArrayBuffer): string {
     .replace(/=+$/, "");
 }
 
+function getCallbackUrl(): string {
+  return `${window.location.origin}/auth/callback`;
+}
+
 export async function beginLogin(): Promise<void> {
+  const callbackUrl = getCallbackUrl();
   const verifier = randomString(48);
   const state = randomString(24);
   const challenge = base64Url(await sha256(verifier));
@@ -31,7 +34,7 @@ export async function beginLogin(): Promise<void> {
     client_id: CLIENT_ID,
     response_type: "code",
     scope: "openid email",
-    redirect_uri: CALLBACK_URL,
+    redirect_uri: callbackUrl,
     code_challenge_method: "S256",
     code_challenge: challenge,
     state,
@@ -40,6 +43,7 @@ export async function beginLogin(): Promise<void> {
 }
 
 export async function completeLogin(): Promise<void> {
+  const callbackUrl = getCallbackUrl();
   const params = new URLSearchParams(window.location.search);
   const code = params.get("code");
   const returnedState = params.get("state");
@@ -54,7 +58,7 @@ export async function completeLogin(): Promise<void> {
     grant_type: "authorization_code",
     client_id: CLIENT_ID,
     code,
-    redirect_uri: CALLBACK_URL,
+    redirect_uri: callbackUrl,
     code_verifier: verifier,
   });
   const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
@@ -93,6 +97,6 @@ export function clearSession(): void {
 
 export function signOut(): void {
   clearSession();
-  const params = new URLSearchParams({ client_id: CLIENT_ID, logout_uri: LOGOUT_URL });
+  const params = new URLSearchParams({ client_id: CLIENT_ID, logout_uri: `${window.location.origin}/login` });
   window.location.assign(`${COGNITO_DOMAIN}/logout?${params.toString()}`);
 }
