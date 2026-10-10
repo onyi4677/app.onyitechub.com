@@ -215,6 +215,7 @@ def get_project(project_id: str, user: dict[str, Any] = Depends(require_user)) -
 
 @router.get("/projects/{project_id}/modules/{module_key}")
 def get_project_module(project_id: str, module_key: str, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     if module_key not in get_modules():
         raise HTTPException(status_code=404, detail="Unknown research module")
     return {"module": module_key, "content": get_module(project_id, module_key)}
@@ -222,6 +223,7 @@ def get_project_module(project_id: str, module_key: str, user: dict[str, Any] = 
 
 @router.put("/projects/{project_id}/modules/{module_key}")
 def update_project_module(project_id: str, module_key: str, payload: ModuleUpdateRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     if module_key not in get_modules():
         raise HTTPException(status_code=404, detail="Unknown research module")
     content = save_module(project_id, module_key, payload.content)
@@ -230,12 +232,14 @@ def update_project_module(project_id: str, module_key: str, payload: ModuleUpdat
 
 @router.post("/projects/{project_id}/literature/sources")
 def add_literature_source(project_id: str, payload: LiteratureSourceRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     item = {"source_id": str(uuid4()), **payload.model_dump()}
     return {"status": "created", "source": _append_to_module(project_id, "literature_evidence", "sources", item)}
 
 
 @router.post("/projects/{project_id}/literature/evidence")
 def add_evidence_item(project_id: str, payload: EvidenceItemRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(project_id, "literature_evidence")
     source_ids = {s.get("source_id") for s in module.get("sources", [])}
     if payload.source_id not in source_ids:
@@ -246,6 +250,7 @@ def add_evidence_item(project_id: str, payload: EvidenceItemRequest, user: dict[
 
 @router.post("/projects/{project_id}/literature/claims")
 def add_literature_claim(project_id: str, payload: ClaimRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(project_id, "literature_evidence")
     evidence_ids = {e.get("evidence_id") for e in module.get("evidence_items", [])}
     source_ids = {s.get("source_id") for s in module.get("sources", [])}
@@ -259,12 +264,14 @@ def add_literature_claim(project_id: str, payload: ClaimRequest, user: dict[str,
 
 @router.post("/projects/{project_id}/references")
 def add_reference(project_id: str, payload: ReferenceRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     item = {"reference_id": str(uuid4()), **payload.model_dump()}
     return {"status": "created", "reference": _append_to_module(project_id, "references_citations", "references", item)}
 
 
 @router.post("/projects/{project_id}/citations")
 def add_citation(project_id: str, payload: CitationRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(project_id, "references_citations")
     reference_ids = {r.get("reference_id") for r in module.get("references", [])}
     if any(rid not in reference_ids for rid in payload.reference_ids):
@@ -275,6 +282,7 @@ def add_citation(project_id: str, payload: CitationRequest, user: dict[str, Any]
 
 @router.get("/projects/{project_id}/citation-integrity")
 def citation_integrity(project_id: str, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(project_id, "references_citations")
     references = module.get("references", [])
     citations = module.get("in_text_citations", [])
