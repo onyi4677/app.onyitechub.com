@@ -90,6 +90,33 @@ class CitationRequest(BaseModel):
     page: str | None = None
 
 
+
+def _require_project_access(project_id: str, user: dict[str, Any]) -> dict[str, Any]:
+    """Return a project only to its owner; the configured founder may claim legacy records."""
+    try:
+        response = projects_table.get_item(Key={"id": project_id})
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
+    project = response.get("Item")
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.get("owner_sub") == user["sub"]:
+        return project
+    founder_sub = os.getenv("FOUNDER_COGNITO_SUB", "")
+    if not project.get("owner_sub") and founder_sub and user["sub"] == founder_sub:
+        project["owner_sub"] = user["sub"]
+        try:
+            projects_table.put_item(Item=project)
+        except ClientError as exc:
+            raise HTTPException(status_code=500, detail="Unable to secure legacy project") from exc
+        return project
+    raise HTTPException(status_code=404, detail="Project not found")
+
+
+def _public_project(project: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in project.items() if key != "owner_sub"}
+
+
 def _project_module_or_empty(project_id: str, module_key: str) -> dict[str, Any]:
     try:
         return get_module(project_id, module_key)
