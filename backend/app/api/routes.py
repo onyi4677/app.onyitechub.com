@@ -1,10 +1,12 @@
+import os
 from typing import Any
 from uuid import uuid4
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.auth import require_user
 from app.db import projects_table
 from app.modules.literature_evidence import get_literature_evidence_spec
 from app.modules.references_citations import get_references_citations_spec
@@ -88,6 +90,33 @@ class CitationRequest(BaseModel):
     page: str | None = None
 
 
+
+def _require_project_access(project_id: str, user: dict[str, Any]) -> dict[str, Any]:
+    """Return a project only to its owner; the configured founder may claim legacy records."""
+    try:
+        response = projects_table.get_item(Key={"id": project_id})
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
+    project = response.get("Item")
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.get("owner_sub") == user["sub"]:
+        return project
+    founder_sub = os.getenv("FOUNDER_COGNITO_SUB", "")
+    if not project.get("owner_sub") and founder_sub and user["sub"] == founder_sub:
+        project["owner_sub"] = user["sub"]
+        try:
+            projects_table.put_item(Item=project)
+        except ClientError as exc:
+            raise HTTPException(status_code=500, detail="Unable to secure legacy project") from exc
+        return project
+    raise HTTPException(status_code=404, detail="Project not found")
+
+
+def _public_project(project: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in project.items() if key != "owner_sub"}
+
+
 def _project_module_or_empty(project_id: str, module_key: str) -> dict[str, Any]:
     try:
         return get_module(project_id, module_key)
@@ -132,15 +161,16 @@ def references_citations_spec() -> dict[str, Any]:
 
 
 @router.post("/analyze")
-def analyze(request: AnalyzeRequest) -> dict:
+def analyze(request: AnalyzeRequest, user: dict[str, Any] = Depends(require_user)) -> dict:
     return analyze_idea(request.text)
 
 
 @router.post("/projects")
-def create_project(payload: ProjectCreateRequest) -> dict:
+def create_project(payload: ProjectCreateRequest, user: dict[str, Any] = Depends(require_user)) -> dict:
     project_id = str(uuid4())
     project = {
         "id": project_id,
+        "owner_sub": user["sub"],
         "title": payload.title,
         "question": payload.question,
         "discipline": payload.discipline,
@@ -151,41 +181,49 @@ def create_project(payload: ProjectCreateRequest) -> dict:
         projects_table.put_item(Item=project)
     except ClientError as exc:
         raise HTTPException(status_code=500, detail="Unable to save project") from exc
-    return {"id": project_id, "status": "created", "project": project}
+    return {"id": project_id, "status": "created", "project": _public_project(project)}
 
 
 @router.get("/projects")
-def list_projects() -> dict[str, Any]:
+def list_projects(user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
     try:
         response = projects_table.scan()
     except ClientError as exc:
         raise HTTPException(status_code=500, detail="Unable to list projects") from exc
     projects = response.get("Items", [])
-    projects.sort(key=lambda item: item.get("updated_at", item.get("id", "")), reverse=True)
-    return {"projects": projects}
+    founder_sub = os.getenv("FOUNDER_COGNITO_SUB", "")
+    visible = []
+    for project in projects:
+        if project.get("owner_sub") == user["sub"]:
+            visible.append(project)
+        elif not project.get("owner_sub") and founder_sub and user["sub"] == founder_sub:
+            project["owner_sub"] = user["sub"]
+            try:
+                projects_table.put_item(Item=project)
+                visible.append(project)
+            except ClientError as exc:
+                raise HTTPException(status_code=500, detail="Unable to secure legacy project") from exc
+    visible.sort(key=lambda item: item.get("updated_at", item.get("id", "")), reverse=True)
+    return {"projects": [_public_project(item) for item in visible]}
 
 
 @router.get("/projects/{project_id}")
-def get_project(project_id: str) -> dict:
-    try:
-        response = projects_table.get_item(Key={"id": project_id})
-    except ClientError as exc:
-        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
-    project = response.get("Item")
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return {"project": project}
+def get_project(project_id: str, user: dict[str, Any] = Depends(require_user)) -> dict:
+    project = _require_project_access(project_id, user)
+    return {"project": _public_project(project)}
 
 
 @router.get("/projects/{project_id}/modules/{module_key}")
-def get_project_module(project_id: str, module_key: str) -> dict[str, Any]:
+def get_project_module(project_id: str, module_key: str, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     if module_key not in get_modules():
         raise HTTPException(status_code=404, detail="Unknown research module")
     return {"module": module_key, "content": get_module(project_id, module_key)}
 
 
 @router.put("/projects/{project_id}/modules/{module_key}")
-def update_project_module(project_id: str, module_key: str, payload: ModuleUpdateRequest) -> dict[str, Any]:
+def update_project_module(project_id: str, module_key: str, payload: ModuleUpdateRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     if module_key not in get_modules():
         raise HTTPException(status_code=404, detail="Unknown research module")
     content = save_module(project_id, module_key, payload.content)
@@ -193,13 +231,15 @@ def update_project_module(project_id: str, module_key: str, payload: ModuleUpdat
 
 
 @router.post("/projects/{project_id}/literature/sources")
-def add_literature_source(project_id: str, payload: LiteratureSourceRequest) -> dict[str, Any]:
+def add_literature_source(project_id: str, payload: LiteratureSourceRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     item = {"source_id": str(uuid4()), **payload.model_dump()}
     return {"status": "created", "source": _append_to_module(project_id, "literature_evidence", "sources", item)}
 
 
 @router.post("/projects/{project_id}/literature/evidence")
-def add_evidence_item(project_id: str, payload: EvidenceItemRequest) -> dict[str, Any]:
+def add_evidence_item(project_id: str, payload: EvidenceItemRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(project_id, "literature_evidence")
     source_ids = {s.get("source_id") for s in module.get("sources", [])}
     if payload.source_id not in source_ids:
@@ -209,7 +249,8 @@ def add_evidence_item(project_id: str, payload: EvidenceItemRequest) -> dict[str
 
 
 @router.post("/projects/{project_id}/literature/claims")
-def add_literature_claim(project_id: str, payload: ClaimRequest) -> dict[str, Any]:
+def add_literature_claim(project_id: str, payload: ClaimRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(project_id, "literature_evidence")
     evidence_ids = {e.get("evidence_id") for e in module.get("evidence_items", [])}
     source_ids = {s.get("source_id") for s in module.get("sources", [])}
@@ -222,13 +263,15 @@ def add_literature_claim(project_id: str, payload: ClaimRequest) -> dict[str, An
 
 
 @router.post("/projects/{project_id}/references")
-def add_reference(project_id: str, payload: ReferenceRequest) -> dict[str, Any]:
+def add_reference(project_id: str, payload: ReferenceRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     item = {"reference_id": str(uuid4()), **payload.model_dump()}
     return {"status": "created", "reference": _append_to_module(project_id, "references_citations", "references", item)}
 
 
 @router.post("/projects/{project_id}/citations")
-def add_citation(project_id: str, payload: CitationRequest) -> dict[str, Any]:
+def add_citation(project_id: str, payload: CitationRequest, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(project_id, "references_citations")
     reference_ids = {r.get("reference_id") for r in module.get("references", [])}
     if any(rid not in reference_ids for rid in payload.reference_ids):
@@ -238,7 +281,8 @@ def add_citation(project_id: str, payload: CitationRequest) -> dict[str, Any]:
 
 
 @router.get("/projects/{project_id}/citation-integrity")
-def citation_integrity(project_id: str) -> dict[str, Any]:
+def citation_integrity(project_id: str, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(project_id, "references_citations")
     references = module.get("references", [])
     citations = module.get("in_text_citations", [])
