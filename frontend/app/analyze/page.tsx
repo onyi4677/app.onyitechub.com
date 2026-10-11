@@ -3,14 +3,16 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Nav from "../../components/nav";
-import { analyzeIdea, getProject, Project } from "../../lib/api";
+import { analyzeIdea, chatWithNatlas, getProject, Project } from "../../lib/api";
 
 export default function AnalyzePage() {
   const [text, setText] = useState("");
   const [project, setProject] = useState<Project | null>(null);
   const [result, setResult] = useState<Awaited<ReturnType<typeof analyzeIdea>> | null>(null);
+  const [natlasAnswer, setNatlasAnswer] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [natlasLoading, setNatlasLoading] = useState(false);
 
   useEffect(() => {
     const projectId = new URLSearchParams(window.location.search).get("project");
@@ -31,13 +33,34 @@ export default function AnalyzePage() {
     }
 
     setError("");
+    setNatlasAnswer("");
     setLoading(true);
     try {
       setResult(await analyzeIdea(text.trim()));
-    } catch {
-      setError("Analysis failed. Check that the API is running.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Analysis failed. Check that the API is running.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleNatlas() {
+    if (!text.trim()) {
+      setError("Enter a research question or idea before using N-ATLaS.");
+      return;
+    }
+
+    setError("");
+    setResult(null);
+    setNatlasAnswer("");
+    setNatlasLoading(true);
+    try {
+      const response = await chatWithNatlas(text.trim());
+      setNatlasAnswer(response.answer);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "N-ATLaS could not respond. Please try again.");
+    } finally {
+      setNatlasLoading(false);
     }
   }
 
@@ -47,10 +70,10 @@ export default function AnalyzePage() {
       <main className="container page">
         <div className="pagehead">
           <div>
-            <div className="eyebrow">AI analysis</div>
+            <div className="eyebrow">Research AI</div>
             <h2>Analyze a research idea</h2>
             <p className="muted">
-              Prototype analysis — the backend currently uses deterministic rules; no external AI credentials are required.
+              Use the prototype analysis or ask N-ATLaS to help explore a research question. Review AI-generated responses critically before using them in academic work.
             </p>
           </div>
         </div>
@@ -62,27 +85,40 @@ export default function AnalyzePage() {
             </div>
           )}
 
-          <label htmlFor="idea">Research idea</label>
+          <label htmlFor="idea">Research question or idea</label>
           <textarea
             id="idea"
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="Paste a research idea, abstract, or problem statement..."
+            placeholder="Enter a research question, idea, abstract, or problem statement..."
+            maxLength={5000}
           />
+          <p className="muted">{text.length}/5000 characters</p>
 
-          {error && <div className="notice">{error}</div>}
+          {error && <div className="notice" role="alert">{error}</div>}
 
           <div className="actions">
-            <button className="button primary" onClick={handleAnalyze} disabled={loading}>
-              {loading ? "Analyzing..." : "Analyze idea"}
+            <button className="button primary" onClick={handleNatlas} disabled={natlasLoading || loading}>
+              {natlasLoading ? "N-ATLaS is responding..." : "Generate with N-ATLaS"}
+            </button>
+            <button className="button" onClick={handleAnalyze} disabled={loading || natlasLoading}>
+              {loading ? "Analyzing..." : "Run prototype analysis"}
             </button>
             <Link className="button" href={project ? `/projects/${project.id}` : "/dashboard"}>
               Back
             </Link>
           </div>
 
+          {natlasAnswer && (
+            <section className="notice" aria-live="polite">
+              <strong>N-ATLaS response</strong>
+              <p>{natlasAnswer}</p>
+              <p className="muted">AI-generated research assistance. Verify facts and references independently.</p>
+            </section>
+          )}
+
           {result && (
-            <div className="notice">
+            <div className="notice" aria-live="polite">
               <strong>{result.summary}</strong>
               <p>Word count: {result.word_count}</p>
               <ul>{result.suggestions.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ul>
