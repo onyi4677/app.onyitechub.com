@@ -6,3 +6,10 @@ export async function analyzeIdea(text: string) {
     body: JSON.stringify({ text }),
   });
 }
+
+export async function chatWithNatlas(message: string) {
+  return apiRequest<{ status: string; model: string; answer: string }>("/api/natlas/chat", {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+}
