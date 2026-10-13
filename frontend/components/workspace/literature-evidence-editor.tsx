@@ -572,6 +572,32 @@ export default function LiteratureEvidenceEditor({
         </label>
 
         <label>
+          Literature source (optional; select one or more)
+          <select
+            multiple
+            value={claim.source_ids}
+            onChange={(e) =>
+              setClaim({
+                ...claim,
+                source_ids: Array.from(
+                  e.target.selectedOptions,
+                  (o) => o.value
+                ),
+              })
+            }
+          >
+            {sources.map((s) => (
+              <option key={s.source_id} value={s.source_id}>
+                {s.authors.join(", ")} ({s.year ?? "n.d."}) — {s.title}
+              </option>
+            ))}
+          </select>
+          <span className="muted">
+            Use this when the claim is supported directly by a source. You can also select an evidence item above.
+          </span>
+        </label>
+
+        <label>
           Confidence
           <select
             value={claim.confidence || ""}
