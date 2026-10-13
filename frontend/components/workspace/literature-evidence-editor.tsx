@@ -59,6 +59,7 @@ export default function LiteratureEvidenceEditor({
   const [gap, setGap] = useState("");
   const [source, setSource] = useState<LiteratureSourceInput>(emptySource());
   const [ev, setEv] = useState(emptyEvidence());
+  const [editingEvidenceId, setEditingEvidenceId] = useState<string | null>(null);
   const [claim, setClaim] = useState(emptyClaim());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -146,6 +147,66 @@ export default function LiteratureEvidenceEditor({
     } finally {
       setSaving(false);
     }
+  }
+
+  function startEditingEvidence(item: EvidenceItem) {
+    setEv({
+      source_id: item.source_id,
+      finding: item.finding,
+      population: item.population ?? "",
+      setting: item.setting ?? "",
+      method: item.method ?? "",
+      sample_size: item.sample_size ?? null,
+      limitations: item.limitations ?? [],
+      notes: item.notes ?? "",
+    });
+    setEditingEvidenceId(item.evidence_id);
+    setMessage("Editing existing evidence. Save changes to update this record.");
+  }
+
+  async function updateEvidence() {
+    if (!editingEvidenceId) return;
+    if (!ev.source_id) {
+      return setMessage("Select the supporting source.");
+    }
+    if (!ev.finding.trim()) {
+      return setMessage("Evidence finding is required.");
+    }
+
+    const nextEvidence = evidence.map((item) =>
+      item.evidence_id === editingEvidenceId
+        ? {
+            ...item,
+            ...ev,
+            limitations: ev.limitations.filter(Boolean),
+          }
+        : item
+    );
+
+    setSaving(true);
+    try {
+      await saveLiteratureWorkspace(projectId, {
+        sources,
+        evidence_items: nextEvidence,
+        claims,
+        research_gap: gap,
+        synthesis,
+      });
+      setEvidence(nextEvidence);
+      setEv(emptyEvidence());
+      setEditingEvidenceId(null);
+      setMessage("Evidence changes saved. Existing source and claim links were preserved.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not update evidence.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function cancelEvidenceEdit() {
+    setEv(emptyEvidence());
+    setEditingEvidenceId(null);
+    setMessage("Evidence editing cancelled.");
   }
 
   async function addClaim() {
@@ -517,14 +578,58 @@ export default function LiteratureEvidenceEditor({
           />
         </label>
 
-        <button
-          className="button"
-          type="button"
-          disabled={saving}
-          onClick={addEv}
-        >
-          Add evidence
-        </button>
+        <div className="button-row">
+          <button
+            className="button"
+            type="button"
+            disabled={saving}
+            onClick={editingEvidenceId ? updateEvidence : addEv}
+          >
+            {saving
+              ? "Saving..."
+              : editingEvidenceId
+                ? "Save evidence changes"
+                : "Add evidence"}
+          </button>
+          {editingEvidenceId && (
+            <button
+              className="button button-secondary"
+              type="button"
+              disabled={saving}
+              onClick={cancelEvidenceEdit}
+            >
+              Cancel edit
+            </button>
+          )}
+        </div>
+
+        {evidence.length > 0 && (
+          <div className="evidence-list">
+            <h3>Saved evidence items</h3>
+            {evidence.map((item, index) => {
+              const linkedSource = sources.find(
+                (s) => s.source_id === item.source_id
+              );
+              return (
+                <div className="notice" key={item.evidence_id}>
+                  <strong>Evidence Item {index + 1}</strong>
+                  <p>{item.finding}</p>
+                  <p className="muted">
+                    Source: {linkedSource?.title ?? "Source not found"}
+                  </p>
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    disabled={saving}
+                    onClick={() => startEditingEvidence(item)}
+                  >
+                    Edit evidence
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="card editor-section">
