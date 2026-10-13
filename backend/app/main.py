@@ -1,4 +1,4 @@
-```python
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
@@ -33,4 +33,3 @@ def root() -> dict[str, str]:
 
 
 handler = Mangum(app)
-```
