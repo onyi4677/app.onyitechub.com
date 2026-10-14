@@ -61,6 +61,7 @@ export default function LiteratureEvidenceEditor({
   const [ev, setEv] = useState(emptyEvidence());
   const [editingEvidenceId, setEditingEvidenceId] = useState<string | null>(null);
   const [claim, setClaim] = useState(emptyClaim());
+  const [editingClaimId, setEditingClaimId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -233,6 +234,58 @@ export default function LiteratureEvidenceEditor({
     } finally {
       setSaving(false);
     }
+  }
+
+  function startEditingClaim(item: LiteratureClaim) {
+    setClaim({
+      text: item.text,
+      evidence_ids: item.evidence_ids ?? [],
+      source_ids: item.source_ids ?? [],
+      confidence: item.confidence || "moderate",
+    });
+    setEditingClaimId(item.claim_id);
+    setMessage("Editing existing claim. Save changes to update this record.");
+  }
+
+  async function updateClaim() {
+    if (!editingClaimId) return;
+    if (!claim.text.trim()) {
+      return setMessage("Claim text is required.");
+    }
+    if (!claim.evidence_ids.length && !claim.source_ids.length) {
+      return setMessage("Link the claim to evidence or a source.");
+    }
+
+    const nextClaims = claims.map((item) =>
+      item.claim_id === editingClaimId
+        ? { ...item, ...claim, claim_id: item.claim_id }
+        : item
+    );
+
+    setSaving(true);
+    try {
+      await saveLiteratureWorkspace(projectId, {
+        sources,
+        evidence_items: evidence,
+        claims: nextClaims,
+        research_gap: gap,
+        synthesis,
+      });
+      setClaims(nextClaims);
+      setClaim(emptyClaim());
+      setEditingClaimId(null);
+      setMessage("Claim changes saved. Existing links and confidence were preserved unless changed.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not update claim.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function cancelClaimEdit() {
+    setClaim(emptyClaim());
+    setEditingClaimId(null);
+    setMessage("Claim editing cancelled.");
   }
 
   async function save() {
@@ -719,14 +772,71 @@ export default function LiteratureEvidenceEditor({
           </select>
         </label>
 
-        <button
-          className="button"
-          type="button"
-          disabled={saving}
-          onClick={addClaim}
-        >
-          Add claim
-        </button>
+        <div className="button-row">
+          <button
+            className="button"
+            type="button"
+            disabled={saving}
+            onClick={editingClaimId ? updateClaim : addClaim}
+          >
+            {saving
+              ? "Saving..."
+              : editingClaimId
+                ? "Save claim changes"
+                : "Add claim"}
+          </button>
+          {editingClaimId && (
+            <button
+              className="button button-secondary"
+              type="button"
+              disabled={saving}
+              onClick={cancelClaimEdit}
+            >
+              Cancel edit
+            </button>
+          )}
+        </div>
+
+        {claims.length > 0 && (
+          <div className="evidence-list">
+            <h3>Saved evidence-backed claims</h3>
+            {claims.map((item, index) => {
+              const linkedSources = sources.filter((s) =>
+                (item.source_ids ?? []).includes(s.source_id)
+              );
+              const linkedEvidence = evidence.filter((evItem) =>
+                (item.evidence_ids ?? []).includes(evItem.evidence_id)
+              );
+              return (
+                <div className="notice" key={item.claim_id}>
+                  <strong>Claim {index + 1}</strong>
+                  <p>{item.text}</p>
+                  <p className="muted">
+                    Confidence: {item.confidence || "moderate"}
+                  </p>
+                  {linkedSources.length > 0 && (
+                    <p className="muted">
+                      Sources: {linkedSources.map((s) => s.title).join("; ")}
+                    </p>
+                  )}
+                  {linkedEvidence.length > 0 && (
+                    <p className="muted">
+                      Evidence: {linkedEvidence.map((evItem) => evItem.finding.slice(0, 120)).join("; ")}
+                    </p>
+                  )}
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    disabled={saving}
+                    onClick={() => startEditingClaim(item)}
+                  >
+                    Edit claim
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="card editor-section">
