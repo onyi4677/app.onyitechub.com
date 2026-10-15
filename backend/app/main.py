@@ -15,7 +15,6 @@ app.add_middleware(
         "http://localhost:3000",
         "https://app.onyitechub.com",
         "https://app-onyitechub-ywwi09o3t-onyitechub.vercel.app",
-        "https://app-onyitechub-com-git-feature-edit-literatur-18bce1-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feature-scoping-review-416932-onyitechub.vercel.app",
     ],
     allow_credentials=True,
