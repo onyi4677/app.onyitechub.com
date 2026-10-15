@@ -7,6 +7,7 @@ import Nav from "../../../../../components/nav";
 import WorkspaceSidebar from "../../../../../components/workspace/workspace-sidebar";
 import ResearchFoundationEditor from "../../../../../components/workspace/research-foundation-editor";
 import LiteratureEvidenceEditor from "../../../../../components/workspace/literature-evidence-editor";
+import ResearchDesignMethodologyEditor from "../../../../../components/workspace/research-design-methodology-editor";
 import { getModules, getProject, getProjectModule, ResearchModule } from "../../../../../lib/api";
 import type { Project } from "../../../../../lib/types";
 
@@ -53,6 +54,8 @@ export default function ModulePage() {
               <ResearchFoundationEditor project={project} projectId={project.id} />
             ) : module === "literature_evidence" ? (
               <LiteratureEvidenceEditor projectId={project.id} />
+            ) : module === "research_design_methodology" || (definition.name.toLowerCase().includes("research design") && definition.name.toLowerCase().includes("methodology")) ? (
+              <ResearchDesignMethodologyEditor projectId={project.id} moduleKey={module} />
             ) : (
             <div className="card module-workspace">
               <div className="module-placeholder">
