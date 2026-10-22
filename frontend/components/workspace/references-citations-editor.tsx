@@ -140,7 +140,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     for (const ref of workspace.references) {
       const rawDoi = (ref.doi || "").trim().toLowerCase()
         .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
-        .replace(/^doi:\\s*/i, "");
+        .replace(/^doi:\s*/i, "");
       const key = rawDoi || (ref.title || "").trim().toLowerCase();
       if (!key) continue;
       const group = groups.get(key) || [];
