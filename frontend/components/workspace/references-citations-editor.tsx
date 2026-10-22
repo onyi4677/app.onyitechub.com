@@ -93,6 +93,47 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
       .finally(() => setLoading(false));
   }, [projectId]);
 
+  const sortedReferences = useMemo(() => {
+    const references = [...workspace.references];
+    const style = workspace.citation_style.trim().toLowerCase();
+
+    // Vancouver references are numbered by first citation appearance.
+    if (style === "vancouver") {
+      const citationOrder = new Map<string, number>();
+      workspace.in_text_citations.forEach((citation) => {
+        citation.reference_ids.forEach((id) => {
+          if (!citationOrder.has(id)) citationOrder.set(id, citationOrder.size);
+        });
+      });
+      return references.sort((a, b) => {
+        const aOrder = citationOrder.get(a.reference_id);
+        const bOrder = citationOrder.get(b.reference_id);
+        if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder;
+        if (aOrder !== undefined) return -1;
+        if (bOrder !== undefined) return 1;
+        return workspace.references.findIndex((ref) => ref.reference_id === a.reference_id)
+          - workspace.references.findIndex((ref) => ref.reference_id === b.reference_id);
+      });
+    }
+
+    // Author-date and other alphabetically ordered bibliography styles.
+    const firstAuthorKey = (reference: ReferenceRecord) => {
+      const firstAuthor = (reference.authors?.[0] || "").trim();
+      // Prefer a surname when metadata is entered as "Surname, Given names".
+      return firstAuthor.includes(",")
+        ? firstAuthor.split(",")[0].trim().toLocaleLowerCase()
+        : firstAuthor.toLocaleLowerCase();
+    };
+    return references.sort((a, b) => {
+      const authorComparison = firstAuthorKey(a).localeCompare(firstAuthorKey(b));
+      if (authorComparison !== 0) return authorComparison;
+      const yearA = a.year ?? Number.MAX_SAFE_INTEGER;
+      const yearB = b.year ?? Number.MAX_SAFE_INTEGER;
+      if (yearA !== yearB) return yearA - yearB;
+      return a.title.localeCompare(b.title);
+    });
+  }, [workspace.references, workspace.in_text_citations, workspace.citation_style]);
+
   const duplicateCount = useMemo(() => {
     const seen = new Set<string>();
     let count = 0;
@@ -268,7 +309,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
         <div className="divider" />
         <div className="pagehead"><div><h4>Saved references ({workspace.references.length})</h4><p className="muted">Potential duplicates: {duplicateCount}. Confirm metadata before manuscript submission.</p></div></div>
         {workspace.references.length === 0 ? <p className="muted">No references yet. Add one above or import existing Literature & Evidence sources.</p> : (
-          <div className="reference-list">{workspace.references.map((reference) => (
+          <div className="reference-list">{sortedReferences.map((reference, index) => (
             <article className="reference-item" key={reference.reference_id}>
               <strong>{reference.title}</strong>
               <p>{reference.authors.join("; ")}{reference.year ? ` (${reference.year})` : ""}</p>
