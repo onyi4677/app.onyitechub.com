@@ -134,16 +134,27 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     });
   }, [workspace.references, workspace.in_text_citations, workspace.citation_style]);
 
-  const duplicateCount = useMemo(() => {
-    const seen = new Set<string>();
-    let count = 0;
+  const duplicateGroups = useMemo(() => {
+    const groups = new Map<string, ReferenceRecord[]>();
     for (const ref of workspace.references) {
-      const key = (ref.doi || ref.title || "").trim().toLowerCase();
-      if (key && seen.has(key)) count += 1;
-      if (key) seen.add(key);
+      const rawDoi = (ref.doi || "").trim().toLowerCase()
+        .replace(/^https?:\\/\\/(dx\\.)?doi\\.org\\//, "")
+        .replace(/^doi:\\s*/i, "");
+      const key = rawDoi || (ref.title || "").trim().toLowerCase();
+      if (!key) continue;
+      const group = groups.get(key) || [];
+      group.push(ref);
+      groups.set(key, group);
     }
-    return count;
+    return Array.from(groups.entries())
+      .filter(([, references]) => references.length > 1)
+      .map(([key, references]) => ({ key, references }));
   }, [workspace.references]);
+
+  const duplicateCount = useMemo(
+    () => duplicateGroups.reduce((count, group) => count + group.references.length - 1, 0),
+    [duplicateGroups],
+  );
 
   function updateForm(key: keyof ReturnType<typeof emptyReference>, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -307,7 +318,24 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
         </form>
 
         <div className="divider" />
-        <div className="pagehead"><div><h4>Saved references ({workspace.references.length})</h4><p className="muted">Potential duplicates: {duplicateCount}. Confirm metadata before manuscript submission.</p></div></div>
+        <div className="pagehead"><div><h4>Saved references ({workspace.references.length})</h4><p className="muted">Potential duplicates: {duplicateCount}. Matching DOI or title values are grouped below for review; no records are changed automatically.</p></div></div>
+        {duplicateGroups.length > 0 && (
+          <section className="notice" aria-label="Potential duplicate reference groups">
+            <strong>Review potential duplicates</strong>
+            {duplicateGroups.map((group) => (
+              <div className="reference-item" key={group.key}>
+                <p className="muted">{group.references[0].doi ? `Matching DOI: ${group.references[0].doi}` : "Matching title (no DOI supplied)"}</p>
+                {group.references.map((reference) => (
+                  <div key={reference.reference_id}>
+                    <strong>{reference.title}</strong>
+                    <p>{reference.authors.join("; ")}{reference.year ? ` (${reference.year})` : ""}</p>
+                    {reference.doi && <p className="muted">DOI: {reference.doi}</p>}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </section>
+        )}
         {workspace.references.length === 0 ? <p className="muted">No references yet. Add one above or import existing Literature & Evidence sources.</p> : (
           <div className="reference-list">{sortedReferences.map((reference, index) => (
             <article className="reference-item" key={reference.reference_id}>
