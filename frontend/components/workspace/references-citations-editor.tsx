@@ -204,6 +204,45 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     setMessage("Reference editing cancelled.");
   }
 
+  async function deleteReference(reference: ReferenceRecord) {
+    if (saving) return;
+
+    const linkedCitations = workspace.in_text_citations.filter((citation) =>
+      (citation.reference_ids || []).includes(reference.reference_id),
+    );
+    const warning = linkedCitations.length
+      ? ` This reference is linked to ${linkedCitations.length} citation mapping(s); those mapping records and their text will be preserved, but this reference will be removed from their linked-reference lists.`
+      : "";
+
+    const confirmed = window.confirm(
+      `Delete the reference "${reference.title}"? This cannot be undone.${warning}`,
+    );
+    if (!confirmed) return;
+
+    const nextWorkspace: Workspace = {
+      ...workspace,
+      references: workspace.references.filter((item) => item.reference_id !== reference.reference_id),
+      in_text_citations: workspace.in_text_citations.map((citation) => ({
+        ...citation,
+        reference_ids: (citation.reference_ids || []).filter((id) => id !== reference.reference_id),
+      })),
+    };
+
+    const saved = await saveWorkspace(nextWorkspace);
+    if (saved !== false) {
+      if (editingReferenceId === reference.reference_id) {
+        setForm(emptyReference());
+        setEditingReferenceId(null);
+      }
+      setSelectedReferenceIds((current) => current.filter((id) => id !== reference.reference_id));
+      setMessage(
+        linkedCitations.length
+          ? `Reference deleted. Preserved ${linkedCitations.length} citation mapping(s) and removed their links to this reference.`
+          : "Reference deleted.",
+      );
+    }
+  }
+
   async function addReference(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!form.title.trim()) return;
@@ -382,7 +421,10 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
               <p className="muted">{[reference.journal_or_book, reference.volume ? `Vol. ${reference.volume}` : "", reference.issue ? `Issue ${reference.issue}` : "", reference.pages ? `pp. ${reference.pages}` : ""].filter(Boolean).join(", ")}</p>
               {reference.doi && <p><a href={reference.doi.startsWith("http") ? reference.doi : `https://doi.org/${reference.doi.replace(/^doi:\s*/i, "")}`} target="_blank" rel="noreferrer">DOI: {reference.doi}</a></p>}
               {reference.url && <p><a href={reference.url} target="_blank" rel="noreferrer">Open source</a></p>}
-              <button className="button" type="button" onClick={() => startEditingReference(reference)}>Edit reference</button>
+              <div className="form-row">
+                <button className="button" type="button" disabled={saving} onClick={() => startEditingReference(reference)}>Edit reference</button>
+                <button className="button" type="button" disabled={saving} onClick={() => deleteReference(reference)}>Delete reference</button>
+              </div>
             </article>
           ))}</div>
         )}
