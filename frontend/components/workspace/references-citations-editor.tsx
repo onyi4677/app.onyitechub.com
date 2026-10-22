@@ -74,6 +74,7 @@ function referenceLabel(reference: ReferenceRecord) {
 export default function ReferencesCitationsEditor({ projectId }: { projectId: string }) {
   const [workspace, setWorkspace] = useState<Workspace>({ references: [], in_text_citations: [], citation_style: "APA 7" });
   const [form, setForm] = useState(emptyReference());
+  const [editingReferenceId, setEditingReferenceId] = useState<string | null>(null);
   const [citationText, setCitationText] = useState("");
   const [citationForm, setCitationForm] = useState("");
   const [citationLocation, setCitationLocation] = useState("");
@@ -167,11 +168,40 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
       await saveProjectModule(projectId, "references_citations", next as unknown as Record<string, unknown>);
       setWorkspace(next);
       setMessage("References and citations saved.");
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save the reference library.");
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  function startEditingReference(reference: ReferenceRecord) {
+    setForm({
+      authors: (reference.authors || []).join("; "),
+      year: reference.year == null ? "" : String(reference.year),
+      title: reference.title || "",
+      source_type: reference.source_type || "journal_article",
+      journal_or_book: reference.journal_or_book || "",
+      volume: reference.volume || "",
+      issue: reference.issue || "",
+      pages: reference.pages || "",
+      publisher: reference.publisher || "",
+      doi: reference.doi || "",
+      url: reference.url || "",
+      abstract: reference.abstract || "",
+      keywords: (reference.keywords || []).join(", "),
+    });
+    setEditingReferenceId(reference.reference_id);
+    setMessage("Editing existing reference. Save to update this record without changing its ID or citation links.");
+    setError("");
+  }
+
+  function cancelReferenceEdit() {
+    setForm(emptyReference());
+    setEditingReferenceId(null);
+    setMessage("Reference editing cancelled.");
   }
 
   async function addReference(event: React.FormEvent<HTMLFormElement>) {
@@ -179,7 +209,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     if (!form.title.trim()) return;
     const authors = form.authors.split(/\n|;/).map((part) => part.trim()).filter(Boolean);
     const nextReference: ReferenceRecord = {
-      reference_id: crypto.randomUUID(),
+      reference_id: editingReferenceId || crypto.randomUUID(),
       authors,
       year: form.year.trim() ? Number(form.year) : null,
       title: form.title.trim(),
@@ -194,9 +224,14 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
       abstract: form.abstract.trim() || null,
       keywords: form.keywords.split(",").map((part) => part.trim()).filter(Boolean),
     };
-    const next = { ...workspace, references: [...workspace.references, nextReference] };
-    await saveWorkspace(next);
-    setForm(emptyReference());
+    const references = editingReferenceId
+      ? workspace.references.map((reference) => reference.reference_id === editingReferenceId ? nextReference : reference)
+      : [...workspace.references, nextReference];
+    const saved = await saveWorkspace({ ...workspace, references });
+    if (saved !== false) {
+      setForm(emptyReference());
+      setEditingReferenceId(null);
+    }
   }
 
   async function importLiteratureSources() {
@@ -292,7 +327,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
         </div>
 
         <form onSubmit={addReference} className="stack-form">
-          <h4>Add a reference</h4>
+          <h4>{editingReferenceId ? "Edit reference" : "Add a reference"}</h4>
           <label className="field-label">Author(s) <span className="muted">— separate authors with semicolons or new lines</span>
             <textarea className="input" rows={2} value={form.authors} onChange={(e) => updateForm("authors", e.target.value)} placeholder="Kaiser, B. N.; Ticao, C." />
           </label>
@@ -314,7 +349,10 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
           <label className="field-label">URL<input className="input" type="url" value={form.url} onChange={(e) => updateForm("url", e.target.value)} /></label>
           <label className="field-label">Abstract or notes<textarea className="input" rows={3} value={form.abstract} onChange={(e) => updateForm("abstract", e.target.value)} /></label>
           <label className="field-label">Keywords <span className="muted">— comma-separated</span><input className="input" value={form.keywords} onChange={(e) => updateForm("keywords", e.target.value)} /></label>
-          <button className="button primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Add reference"}</button>
+          <div className="form-row">
+            <button className="button primary" type="submit" disabled={saving}>{saving ? "Saving..." : editingReferenceId ? "Save reference changes" : "Add reference"}</button>
+            {editingReferenceId && <button className="button" type="button" onClick={cancelReferenceEdit} disabled={saving}>Cancel edit</button>}
+          </div>
         </form>
 
         <div className="divider" />
@@ -344,6 +382,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
               <p className="muted">{[reference.journal_or_book, reference.volume ? `Vol. ${reference.volume}` : "", reference.issue ? `Issue ${reference.issue}` : "", reference.pages ? `pp. ${reference.pages}` : ""].filter(Boolean).join(", ")}</p>
               {reference.doi && <p><a href={reference.doi.startsWith("http") ? reference.doi : `https://doi.org/${reference.doi.replace(/^doi:\s*/i, "")}`} target="_blank" rel="noreferrer">DOI: {reference.doi}</a></p>}
               {reference.url && <p><a href={reference.url} target="_blank" rel="noreferrer">Open source</a></p>}
+              <button className="button" type="button" onClick={() => startEditingReference(reference)}>Edit reference</button>
             </article>
           ))}</div>
         )}
