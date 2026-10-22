@@ -93,16 +93,68 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
       .finally(() => setLoading(false));
   }, [projectId]);
 
-  const duplicateCount = useMemo(() => {
-    const seen = new Set<string>();
-    let count = 0;
-    for (const ref of workspace.references) {
-      const key = (ref.doi || ref.title || "").trim().toLowerCase();
-      if (key && seen.has(key)) count += 1;
-      if (key) seen.add(key);
+  const sortedReferences = useMemo(() => {
+    const references = [...workspace.references];
+    const style = workspace.citation_style.trim().toLowerCase();
+
+    // Vancouver references are numbered by first citation appearance.
+    if (style === "vancouver") {
+      const citationOrder = new Map<string, number>();
+      workspace.in_text_citations.forEach((citation) => {
+        citation.reference_ids.forEach((id) => {
+          if (!citationOrder.has(id)) citationOrder.set(id, citationOrder.size);
+        });
+      });
+      return references.sort((a, b) => {
+        const aOrder = citationOrder.get(a.reference_id);
+        const bOrder = citationOrder.get(b.reference_id);
+        if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder;
+        if (aOrder !== undefined) return -1;
+        if (bOrder !== undefined) return 1;
+        return workspace.references.findIndex((ref) => ref.reference_id === a.reference_id)
+          - workspace.references.findIndex((ref) => ref.reference_id === b.reference_id);
+      });
     }
-    return count;
+
+    // Author-date and other alphabetically ordered bibliography styles.
+    const firstAuthorKey = (reference: ReferenceRecord) => {
+      const firstAuthor = (reference.authors?.[0] || "").trim();
+      // Prefer a surname when metadata is entered as "Surname, Given names".
+      return firstAuthor.includes(",")
+        ? firstAuthor.split(",")[0].trim().toLocaleLowerCase()
+        : firstAuthor.toLocaleLowerCase();
+    };
+    return references.sort((a, b) => {
+      const authorComparison = firstAuthorKey(a).localeCompare(firstAuthorKey(b));
+      if (authorComparison !== 0) return authorComparison;
+      const yearA = a.year ?? Number.MAX_SAFE_INTEGER;
+      const yearB = b.year ?? Number.MAX_SAFE_INTEGER;
+      if (yearA !== yearB) return yearA - yearB;
+      return a.title.localeCompare(b.title);
+    });
+  }, [workspace.references, workspace.in_text_citations, workspace.citation_style]);
+
+  const duplicateGroups = useMemo(() => {
+    const groups = new Map<string, ReferenceRecord[]>();
+    for (const ref of workspace.references) {
+      const rawDoi = (ref.doi || "").trim().toLowerCase()
+        .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
+        .replace(/^doi:\\s*/i, "");
+      const key = rawDoi || (ref.title || "").trim().toLowerCase();
+      if (!key) continue;
+      const group = groups.get(key) || [];
+      group.push(ref);
+      groups.set(key, group);
+    }
+    return Array.from(groups.entries())
+      .filter(([, references]) => references.length > 1)
+      .map(([key, references]) => ({ key, references }));
   }, [workspace.references]);
+
+  const duplicateCount = useMemo(
+    () => duplicateGroups.reduce((count, group) => count + group.references.length - 1, 0),
+    [duplicateGroups],
+  );
 
   function updateForm(key: keyof ReturnType<typeof emptyReference>, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -266,9 +318,26 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
         </form>
 
         <div className="divider" />
-        <div className="pagehead"><div><h4>Saved references ({workspace.references.length})</h4><p className="muted">Potential duplicates: {duplicateCount}. Confirm metadata before manuscript submission.</p></div></div>
+        <div className="pagehead"><div><h4>Saved references ({workspace.references.length})</h4><p className="muted">Potential duplicates: {duplicateCount}. Matching DOI or title values are grouped below for review; no records are changed automatically.</p></div></div>
+        {duplicateGroups.length > 0 && (
+          <section className="notice" aria-label="Potential duplicate reference groups">
+            <strong>Review potential duplicates</strong>
+            {duplicateGroups.map((group) => (
+              <div className="reference-item" key={group.key}>
+                <p className="muted">{group.references[0].doi ? `Matching DOI: ${group.references[0].doi}` : "Matching title (no DOI supplied)"}</p>
+                {group.references.map((reference) => (
+                  <div key={reference.reference_id}>
+                    <strong>{reference.title}</strong>
+                    <p>{reference.authors.join("; ")}{reference.year ? ` (${reference.year})` : ""}</p>
+                    {reference.doi && <p className="muted">DOI: {reference.doi}</p>}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </section>
+        )}
         {workspace.references.length === 0 ? <p className="muted">No references yet. Add one above or import existing Literature & Evidence sources.</p> : (
-          <div className="reference-list">{workspace.references.map((reference) => (
+          <div className="reference-list">{sortedReferences.map((reference, index) => (
             <article className="reference-item" key={reference.reference_id}>
               <strong>{reference.title}</strong>
               <p>{reference.authors.join("; ")}{reference.year ? ` (${reference.year})` : ""}</p>
