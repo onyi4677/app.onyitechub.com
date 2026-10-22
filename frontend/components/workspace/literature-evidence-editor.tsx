@@ -117,6 +117,54 @@ export default function LiteratureEvidenceEditor({
     setMessage("Source editing cancelled.");
   }
 
+  async function deleteSource(item: LiteratureSource) {
+    if (saving) return;
+
+    const linkedEvidence = evidence.filter((entry) => entry.source_id === item.source_id);
+    const linkedEvidenceIds = new Set(linkedEvidence.map((entry) => entry.evidence_id));
+    const linkedClaims = claims.filter(
+      (entry) =>
+        (entry.source_ids || []).includes(item.source_id) ||
+        (entry.evidence_ids || []).some((id) => linkedEvidenceIds.has(id)),
+    );
+
+    if (linkedEvidence.length || linkedClaims.length) {
+      const dependencies = [
+        linkedEvidence.length ? `${linkedEvidence.length} evidence item(s)` : "",
+        linkedClaims.length ? `${linkedClaims.length} claim(s)` : "",
+      ].filter(Boolean).join(" and ");
+      setMessage(`Cannot delete "${item.title}" because ${dependencies} depend on it. Reassign or remove those links first to preserve evidence provenance.`);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete the literature source "${item.title}"? This cannot be undone. Only this source record will be removed.`,
+    );
+    if (!confirmed) return;
+
+    const nextSources = sources.filter((entry) => entry.source_id !== item.source_id);
+    setSaving(true);
+    try {
+      await saveLiteratureWorkspace(projectId, {
+        sources: nextSources,
+        evidence_items: evidence,
+        claims,
+        research_gap: gap,
+        synthesis,
+      });
+      setSources(nextSources);
+      if (editingSourceId === item.source_id) {
+        setSource(emptySource());
+        setEditingSourceId(null);
+      }
+      setMessage(`Source "${item.title}" deleted.`);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not delete source. No local changes were applied.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function addSource() {
     if (!source.title.trim()) {
       return setMessage("Source title is required.");
@@ -589,7 +637,10 @@ export default function LiteratureEvidenceEditor({
               <p className="muted">{[item.journal_or_publisher, item.volume ? `Vol. ${item.volume}` : "", item.issue ? `Issue ${item.issue}` : "", item.pages ? `pp. ${item.pages}` : ""].filter(Boolean).join(", ")}</p>
               {item.doi && <p className="muted">DOI: {item.doi}</p>}
               <p className="muted">Verification: {item.verified ? "Verified" : "Not yet verified"}</p>
-              <button className="button button-secondary" type="button" disabled={saving} onClick={() => startEditingSource(item)}>Edit source</button>
+              <div className="form-row">
+                <button className="button button-secondary" type="button" disabled={saving} onClick={() => startEditingSource(item)}>Edit source</button>
+                <button className="button button-secondary" type="button" disabled={saving} onClick={() => deleteSource(item)}>Delete source</button>
+              </div>
             </div>
           ))}
         </div>
