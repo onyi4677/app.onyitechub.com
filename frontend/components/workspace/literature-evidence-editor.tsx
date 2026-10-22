@@ -58,6 +58,7 @@ export default function LiteratureEvidenceEditor({
   const [synthesis, setSynthesis] = useState("");
   const [gap, setGap] = useState("");
   const [source, setSource] = useState<LiteratureSourceInput>(emptySource());
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [ev, setEv] = useState(emptyEvidence());
   const [editingEvidenceId, setEditingEvidenceId] = useState<string | null>(null);
   const [claim, setClaim] = useState(emptyClaim());
@@ -90,6 +91,32 @@ export default function LiteratureEvidenceEditor({
     load();
   }, [projectId]);
 
+  function startEditingSource(item: LiteratureSource) {
+    setSource({
+      authors: item.authors?.length ? [...item.authors] : [""],
+      year: item.year ?? null,
+      title: item.title || "",
+      source_type: item.source_type || "journal_article",
+      journal_or_publisher: item.journal_or_publisher || "",
+      volume: item.volume || "",
+      issue: item.issue || "",
+      pages: item.pages || "",
+      doi: item.doi || "",
+      url: item.url || "",
+      abstract: item.abstract || "",
+      keywords: [...(item.keywords || [])],
+      verified: Boolean(item.verified),
+    });
+    setEditingSourceId(item.source_id);
+    setMessage("Editing existing source. Save to update its metadata while preserving its source ID and linked evidence/claims.");
+  }
+
+  function cancelSourceEdit() {
+    setSource(emptySource());
+    setEditingSourceId(null);
+    setMessage("Source editing cancelled.");
+  }
+
   async function addSource() {
     if (!source.title.trim()) {
       return setMessage("Source title is required.");
@@ -102,16 +129,36 @@ export default function LiteratureEvidenceEditor({
     setSaving(true);
 
     try {
-      const r = await addLiteratureSource(projectId, {
+      const sourceInput: LiteratureSourceInput = {
         ...source,
-        authors: source.authors.filter(Boolean),
-      });
+        authors: source.authors.map((author) => author.trim()).filter(Boolean),
+        title: source.title.trim(),
+        keywords: source.keywords.map((keyword) => keyword.trim()).filter(Boolean),
+      };
 
-      setSources((x) => [...x, r.source]);
+      if (editingSourceId) {
+        const nextSources = sources.map((item) =>
+          item.source_id === editingSourceId
+            ? { ...item, ...sourceInput, source_id: item.source_id }
+            : item
+        );
+        await saveLiteratureWorkspace(projectId, {
+          sources: nextSources,
+          evidence_items: evidence,
+          claims,
+          research_gap: gap,
+          synthesis,
+        });
+        setSources(nextSources);
+        setMessage("Source changes saved. Existing evidence and claim links were preserved.");
+      } else {
+        const r = await addLiteratureSource(projectId, sourceInput);
+        setSources((x) => [...x, r.source]);
+        setMessage("Source added. Verify it before using it as evidence.");
+      }
+
       setSource(emptySource());
-      setMessage(
-        "Source added. Verify it before using it as evidence."
-      );
+      setEditingSourceId(null);
     } catch (e) {
       setMessage(
         e instanceof Error ? e.message : "Could not add source."
@@ -509,15 +556,44 @@ export default function LiteratureEvidenceEditor({
           I have verified this source and its metadata.
         </label>
 
-        <button
-          className="button"
-          type="button"
-          disabled={saving}
-          onClick={addSource}
-        >
-          Add source
-        </button>
+        <div className="button-row">
+          <button
+            className="button"
+            type="button"
+            disabled={saving}
+            onClick={addSource}
+          >
+            {saving ? "Saving..." : editingSourceId ? "Save source changes" : "Add source"}
+          </button>
+          {editingSourceId && (
+            <button
+              className="button button-secondary"
+              type="button"
+              disabled={saving}
+              onClick={cancelSourceEdit}
+            >
+              Cancel edit
+            </button>
+          )}
+        </div>
       </div>
+
+      {sources.length > 0 && (
+        <div className="card editor-section">
+          <div className="eyebrow">Saved literature sources ({sources.length})</div>
+          <p className="muted">Edit metadata without creating a new source record. Linked evidence and claims remain attached to the same source ID.</p>
+          {sources.map((item) => (
+            <div className="notice" key={item.source_id}>
+              <strong>{item.title}</strong>
+              <p>{item.authors.join("; ")} ({item.year ?? "n.d."})</p>
+              <p className="muted">{[item.journal_or_publisher, item.volume ? `Vol. ${item.volume}` : "", item.issue ? `Issue ${item.issue}` : "", item.pages ? `pp. ${item.pages}` : ""].filter(Boolean).join(", ")}</p>
+              {item.doi && <p className="muted">DOI: {item.doi}</p>}
+              <p className="muted">Verification: {item.verified ? "Verified" : "Not yet verified"}</p>
+              <button className="button button-secondary" type="button" disabled={saving} onClick={() => startEditingSource(item)}>Edit source</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="card editor-section">
         <div className="eyebrow">2. Evidence extraction</div>
