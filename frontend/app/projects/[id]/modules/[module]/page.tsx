@@ -8,6 +8,7 @@ import WorkspaceSidebar from "../../../../../components/workspace/workspace-side
 import ResearchFoundationEditor from "../../../../../components/workspace/research-foundation-editor";
 import LiteratureEvidenceEditor from "../../../../../components/workspace/literature-evidence-editor";
 import ResearchDesignMethodologyEditor from "../../../../../components/workspace/research-design-methodology-editor";
+import ReferencesCitationsEditor from "../../../../../components/workspace/references-citations-editor";
 import { getModules, getProject, getProjectModule, ResearchModule } from "../../../../../lib/api";
 import type { Project } from "../../../../../lib/types";
 
@@ -54,23 +55,25 @@ export default function ModulePage() {
               <ResearchFoundationEditor project={project} projectId={project.id} />
             ) : module === "literature_evidence" ? (
               <LiteratureEvidenceEditor projectId={project.id} />
+            ) : module === "references_citations" ? (
+              <ReferencesCitationsEditor projectId={project.id} />
             ) : module === "research_design_methodology" || (definition.name.toLowerCase().includes("research design") && definition.name.toLowerCase().includes("methodology")) ? (
               <ResearchDesignMethodologyEditor projectId={project.id} moduleKey={module} />
             ) : (
-            <div className="card module-workspace">
-              <div className="module-placeholder">
-                <div className="eyebrow">{definition.status === "active" ? "Research module" : "Planned module"}</div>
-                <h3>{definition.status === "active" ? "Ready for structured research work" : "Module architecture prepared"}</h3>
-                <p>
-                  {definition.status === "active"
-                    ? "This module is connected to the research project backend. The structured editor and validation workflow will be built here."
-                    : "The module is registered in the research workflow and will become available as its backend capability is implemented."}
-                </p>
-                {Object.keys(moduleData[module] || {}).length > 0 && (
-                  <div className="notice">Existing project data is available in this module.</div>
-                )}
+              <div className="card module-workspace">
+                <div className="module-placeholder">
+                  <div className="eyebrow">{definition.status === "active" ? "Research module" : "Planned module"}</div>
+                  <h3>{definition.status === "active" ? "Ready for structured research work" : "Module architecture prepared"}</h3>
+                  <p>
+                    {definition.status === "active"
+                      ? "This module is connected to the research project backend. The structured editor and validation workflow will be built here."
+                      : "The module is registered in the research workflow and will become available as its backend capability is implemented."}
+                  </p>
+                  {Object.keys(moduleData[module] || {}).length > 0 && (
+                    <div className="notice">Existing project data is available in this module.</div>
+                  )}
+                </div>
               </div>
-            </div>
             )}
           </section>
         </div>
