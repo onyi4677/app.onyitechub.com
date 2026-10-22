@@ -138,7 +138,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     const groups = new Map<string, ReferenceRecord[]>();
     for (const ref of workspace.references) {
       const rawDoi = (ref.doi || "").trim().toLowerCase()
-        .replace(/^https?:\\/\\/(dx\\.)?doi\\.org\\//, "")
+        .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
         .replace(/^doi:\\s*/i, "");
       const key = rawDoi || (ref.title || "").trim().toLowerCase();
       if (!key) continue;
