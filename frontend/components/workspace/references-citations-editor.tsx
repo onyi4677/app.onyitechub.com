@@ -71,6 +71,35 @@ function referenceLabel(reference: ReferenceRecord) {
   return `${author}${etAl} (${reference.year ?? "n.d."}) — ${reference.title}`;
 }
 
+function normaliseDoi(value?: string | null) {
+  return (value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
+    .replace(/^doi:\s*/i, "")
+    .replace(/[.\s]+$/, "");
+}
+
+function normaliseText(value?: string | null) {
+  return (value || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+type ReferenceIdentity = Pick<ReferenceRecord, "doi" | "title" | "year" | "authors">;
+function referenceIdentityKey(reference: ReferenceIdentity) {
+  const doi = normaliseDoi(reference.doi);
+  if (doi) return `doi:${doi}`;
+  const title = normaliseText(reference.title);
+  if (!title) return "";
+  const year = reference.year ?? "";
+  const firstAuthor = normaliseText(reference.authors?.[0]);
+  return `meta:${title}|${year}|${firstAuthor}`;
+}
+
 export default function ReferencesCitationsEditor({ projectId }: { projectId: string }) {
   const [workspace, setWorkspace] = useState<Workspace>({ references: [], in_text_citations: [], citation_style: "APA 7" });
   const [form, setForm] = useState(emptyReference());
@@ -138,10 +167,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
   const duplicateGroups = useMemo(() => {
     const groups = new Map<string, ReferenceRecord[]>();
     for (const ref of workspace.references) {
-      const rawDoi = (ref.doi || "").trim().toLowerCase()
-        .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
-        .replace(/^doi:\s*/i, "");
-      const key = rawDoi || (ref.title || "").trim().toLowerCase();
+      const key = referenceIdentityKey(ref);
       if (!key) continue;
       const group = groups.get(key) || [];
       group.push(ref);
@@ -151,7 +177,6 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
       .filter(([, references]) => references.length > 1)
       .map(([key, references]) => ({ key, references }));
   }, [workspace.references]);
-
   const duplicateCount = useMemo(
     () => duplicateGroups.reduce((count, group) => count + group.references.length - 1, 0),
     [duplicateGroups],
@@ -263,10 +288,21 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
       abstract: form.abstract.trim() || null,
       keywords: form.keywords.split(",").map((part) => part.trim()).filter(Boolean),
     };
+    const identityKey = referenceIdentityKey(nextReference);
+    const duplicate = workspace.references.find((reference) =>
+      reference.reference_id !== editingReferenceId &&
+      identityKey !== "" &&
+      referenceIdentityKey(reference) === identityKey,
+    );
+    if (duplicate) {
+      setError(`This work is already in the reference library as “${duplicate.title}”. Open that record to edit it instead of adding a duplicate.`);
+      setMessage("");
+      return;
+    }
     const references = editingReferenceId
       ? workspace.references.map((reference) => reference.reference_id === editingReferenceId ? nextReference : reference)
       : [...workspace.references, nextReference];
-    const saved = await saveWorkspace({ ...workspace, references });
+    const saved = await saveWorkspace({ ...workspace, references });    const saved = await saveWorkspace({ ...workspace, references });
     if (saved !== false) {
       setForm(emptyReference());
       setEditingReferenceId(null);
@@ -279,13 +315,11 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     setMessage("");
     try {
       const literature = await getLiteratureWorkspace(projectId);
-      const existingKeys = new Set(workspace.references.map((ref) => (ref.doi || ref.title).trim().toLowerCase()));
-      const additions: ReferenceRecord[] = literature.sources
-        .filter((source) => {
-          const key = (source.doi || source.title).trim().toLowerCase();
-          return key && !existingKeys.has(key);
-        })
-        .map((source) => ({
+      const existingKeys = new Set(workspace.references.map(referenceIdentityKey).filter(Boolean));
+      const additions: ReferenceRecord[] = [];
+      let skippedDuplicates = 0;
+      for (const source of literature.sources) {
+        const candidate: ReferenceRecord = {
           reference_id: source.source_id,
           authors: source.authors || [],
           year: source.year ?? null,
@@ -300,10 +334,24 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
           url: source.url ?? null,
           abstract: source.abstract ?? null,
           keywords: source.keywords || [],
-        }));
+        };
+        const key = referenceIdentityKey(candidate);
+        if (!key || existingKeys.has(key)) {
+          skippedDuplicates += 1;
+          continue;
+        }
+        existingKeys.add(key);
+        additions.push(candidate);
+      }
       const next = { ...workspace, references: [...workspace.references, ...additions] };
-      await saveWorkspace(next);
-      setMessage(additions.length ? `Imported ${additions.length} literature source(s).` : "No new literature sources to import; existing titles/DOIs were matched.");
+      const saved = await saveWorkspace(next);
+      if (saved) {
+        setMessage(
+          additions.length
+            ? `Imported ${additions.length} literature source(s); skipped ${skippedDuplicates} duplicate or unidentifiable source(s).`
+            : `No new literature sources imported; skipped ${skippedDuplicates} duplicate or unidentifiable source(s).`,
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not import literature sources.");
     } finally {
