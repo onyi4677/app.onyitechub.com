@@ -15,7 +15,7 @@ app.add_middleware(
         "http://localhost:3000",
         "https://app.onyitechub.com",
         "https://app-onyitechub-ywwi09o3t-onyitechub.vercel.app",
-        "https://app-onyitechub-czpg1j2kn-onyitechub.vercel.app",
+        "https://app-onyitechub-358h7j9c1-onyitechub.vercel.app",
         "https://app-onyitechub-m3au06wu5-onyitechub.vercel.app",
         "https://app-onyitechub-pm470k3k8-onyitechub.vercel.app",
         "https://app-onyitechub-72fh26kep-onyitechub.vercel.app",
