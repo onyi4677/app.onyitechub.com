@@ -302,7 +302,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     const references = editingReferenceId
       ? workspace.references.map((reference) => reference.reference_id === editingReferenceId ? nextReference : reference)
       : [...workspace.references, nextReference];
-    const saved = await saveWorkspace({ ...workspace, references });    const saved = await saveWorkspace({ ...workspace, references });
+    const saved = await saveWorkspace({ ...workspace, references });
     if (saved !== false) {
       setForm(emptyReference());
       setEditingReferenceId(null);
