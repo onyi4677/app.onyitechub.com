@@ -33,14 +33,21 @@ function normaliseText(value?: string | null) {
 
 type SourceIdentity = Pick<LiteratureSourceInput, "doi" | "title" | "year" | "authors">;
 
-function sourceIdentityKey(item: SourceIdentity) {
+function sourceIdentityKeys(item: SourceIdentity) {
+  const keys: string[] = [];
   const doi = normaliseDoi(item.doi);
-  if (doi) return `doi:${doi}`;
+  if (doi) keys.push(`doi:${doi}`);
   const title = normaliseText(item.title);
-  if (!title) return "";
-  const year = item.year ?? "";
-  const firstAuthor = normaliseText(item.authors?.find((author) => author.trim()));
-  return `meta:${title}|${year}|${firstAuthor}`;
+  if (title) {
+    const year = item.year ?? "";
+    const firstAuthor = normaliseText(item.authors?.find((author) => author.trim()));
+    keys.push(`meta:${title}|${year}|${firstAuthor}`);
+  }
+  return keys;
+}
+
+function sourceIdentityKey(item: SourceIdentity) {
+  return sourceIdentityKeys(item)[0] || "";
 }
 
 const emptySource = (): LiteratureSourceInput => ({
@@ -89,6 +96,8 @@ export default function LiteratureEvidenceEditor({
   const [gap, setGap] = useState("");
   const [source, setSource] = useState<LiteratureSourceInput>(emptySource());
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+  const [editingSourceIdentity, setEditingSourceIdentity] = useState<string[]>([]);
+  const [sourceError, setSourceError] = useState("");
   const [ev, setEv] = useState(emptyEvidence());
   const [editingEvidenceId, setEditingEvidenceId] = useState<string | null>(null);
   const [claim, setClaim] = useState(emptyClaim());
@@ -138,12 +147,16 @@ export default function LiteratureEvidenceEditor({
       verified: Boolean(item.verified),
     });
     setEditingSourceId(item.source_id);
+    setEditingSourceIdentity(sourceIdentityKeys(item));
+    setSourceError("");
     setMessage("Editing existing source. Save to update its metadata while preserving its source ID and linked evidence/claims.");
   }
 
   function cancelSourceEdit() {
     setSource(emptySource());
     setEditingSourceId(null);
+    setEditingSourceIdentity([]);
+    setSourceError("");
     setMessage("Source editing cancelled.");
   }
 
@@ -214,16 +227,19 @@ export default function LiteratureEvidenceEditor({
         keywords: source.keywords.map((keyword) => keyword.trim()).filter(Boolean),
       };
 
-      const identityKey = sourceIdentityKey(sourceInput);
+      const identityKeys = sourceIdentityKeys(sourceInput);
+      const identityUnchanged = editingSourceId !== null &&
+        identityKeys.some((key) => editingSourceIdentity.includes(key));
       const duplicate = sources.find((item) =>
         item.source_id !== editingSourceId &&
-        identityKey !== "" &&
-        sourceIdentityKey(item) === identityKey
+        identityKeys.some((key) => sourceIdentityKeys(item).includes(key))
       );
-      if (duplicate) {
-        setMessage(`This work is already saved in Literature & Evidence as “${duplicate.title}”. Open that source to edit it instead of creating a duplicate.`);
+      if (duplicate && !identityUnchanged) {
+        setSourceError(`This work is already saved in Literature & Evidence as “${duplicate.title}”. No duplicate was saved. Open that existing source to edit it, or change the metadata if this is a different work.`);
+        setMessage("");
         return;
       }
+      setSourceError("");
 
       if (editingSourceId) {
         const nextSources = sources.map((item) =>
@@ -248,10 +264,10 @@ export default function LiteratureEvidenceEditor({
 
       setSource(emptySource());
       setEditingSourceId(null);
+      setEditingSourceIdentity([]);
+      setSourceError("");
     } catch (e) {
-      setMessage(
-        e instanceof Error ? e.message : "Could not add source."
-      );
+      setSourceError(e instanceof Error ? e.message : "Could not save source. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -465,6 +481,7 @@ export default function LiteratureEvidenceEditor({
 
       <div className="card editor-section">
         <div className="eyebrow">1. Literature sources</div>
+        {sourceError && <div className="notice" role="alert">{sourceError}</div>}
 
         <label>
           Authors (one per line)
@@ -1071,7 +1088,7 @@ export default function LiteratureEvidenceEditor({
         )}
       </div>
 
-      {message && <div className="notice">{message}</div>}
+      {message && <div className="notice" role="status">{message}</div>}
     </div>
   );
 }
