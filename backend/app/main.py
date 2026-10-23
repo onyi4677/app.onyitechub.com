@@ -21,7 +21,7 @@ app.add_middleware(
         "https://app-onyitechub-72fh26kep-onyitechub.vercel.app",
         "https://app-onyitechub-l25wvbrhz-onyitechub.vercel.app",
         "https://app-onyitechub-ihgt60tmp-onyitechub.vercel.app",
-        "https://app-onyitechub-com-git-feature-delete-sources-a1b41b-onyitechub.vercel.app",
+        "https://app-onyitechub-ko42m4rd5-onyitechub.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
