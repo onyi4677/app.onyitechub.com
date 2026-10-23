@@ -13,6 +13,36 @@ import {
   type EvidenceItem,
 } from "../../lib/api/literature";
 
+function normaliseDoi(value?: string | null) {
+  return (value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\\/\\/(dx\\.)?doi\\.org\\//, "")
+    .replace(/^doi:\\s*/i, "")
+    .replace(/[.\\s]+$/, "");
+}
+
+function normaliseText(value?: string | null) {
+  return (value || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/[^\\p{L}\\p{N}]+/gu, " ")
+    .trim();
+}
+
+type SourceIdentity = Pick<LiteratureSourceInput, "doi" | "title" | "year" | "authors">;
+
+function sourceIdentityKey(item: SourceIdentity) {
+  const doi = normaliseDoi(item.doi);
+  if (doi) return `doi:${doi}`;
+  const title = normaliseText(item.title);
+  if (!title) return "";
+  const year = item.year ?? "";
+  const firstAuthor = normaliseText(item.authors?.find((author) => author.trim()));
+  return `meta:${title}|${year}|${firstAuthor}`;
+}
+
 const emptySource = (): LiteratureSourceInput => ({
   authors: [""],
   year: new Date().getFullYear(),
@@ -183,6 +213,17 @@ export default function LiteratureEvidenceEditor({
         title: source.title.trim(),
         keywords: source.keywords.map((keyword) => keyword.trim()).filter(Boolean),
       };
+
+      const identityKey = sourceIdentityKey(sourceInput);
+      const duplicate = sources.find((item) =>
+        item.source_id !== editingSourceId &&
+        identityKey !== "" &&
+        sourceIdentityKey(item) === identityKey
+      );
+      if (duplicate) {
+        setMessage(`This work is already saved in Literature & Evidence as “${duplicate.title}”. Open that source to edit it instead of creating a duplicate.`);
+        return;
+      }
 
       if (editingSourceId) {
         const nextSources = sources.map((item) =>
