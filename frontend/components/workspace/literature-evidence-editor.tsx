@@ -18,8 +18,8 @@ function normaliseDoi(value?: string | null) {
     .trim()
     .toLowerCase()
     .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
-    .replace(/^doi:\\s*/i, "")
-    .replace(/[.\\s]+$/, "");
+    .replace(/^doi:\s*/i, "")
+    .replace(/[.\s]+$/, "");
 }
 
 function normaliseText(value?: string | null) {
