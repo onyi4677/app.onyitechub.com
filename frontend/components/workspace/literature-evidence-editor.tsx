@@ -17,7 +17,7 @@ function normaliseDoi(value?: string | null) {
   return (value || "")
     .trim()
     .toLowerCase()
-    .replace(/^https?:\\/\\/(dx\\.)?doi\\.org\\//, "")
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
     .replace(/^doi:\\s*/i, "")
     .replace(/[.\\s]+$/, "");
 }
@@ -27,7 +27,7 @@ function normaliseText(value?: string | null) {
     .normalize("NFKC")
     .toLocaleLowerCase()
     .replace(/[’‘]/g, "'")
-    .replace(/[^\\p{L}\\p{N}]+/gu, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 }
 
