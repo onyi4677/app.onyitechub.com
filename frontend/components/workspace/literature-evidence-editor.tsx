@@ -229,7 +229,8 @@ export default function LiteratureEvidenceEditor({
 
       const identityKeys = sourceIdentityKeys(sourceInput);
       const identityUnchanged = editingSourceId !== null &&
-        identityKeys.some((key) => editingSourceIdentity.includes(key));
+        identityKeys.length === editingSourceIdentity.length &&
+        identityKeys.every((key) => editingSourceIdentity.includes(key));
       const duplicate = sources.find((item) =>
         item.source_id !== editingSourceId &&
         identityKeys.some((key) => sourceIdentityKeys(item).includes(key))
