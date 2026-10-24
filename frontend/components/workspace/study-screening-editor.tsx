@@ -73,7 +73,7 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
       assessed: r.filter((x) => ["include", "exclude"].includes(x.full_text_decision)).length,
       fullExcluded: r.filter((x) => x.full_text_decision === "exclude").length,
       included: r.filter((x) => x.full_text_decision === "include").length,
-      unresolved: r.filter((x) => x.title_abstract_decision === "not_screened" || x.title_abstract_decision === "maybe" || x.full_text_decision === "not_assessed").length,
+      unresolved: r.filter((x) => x.title_abstract_decision === "not_screened" || x.title_abstract_decision === "maybe" || (x.title_abstract_decision !== "exclude" && x.full_text_decision === "not_assessed")).length,
     };
   }, [data.records]);
 
@@ -99,6 +99,10 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
         history.push({ stage: "title_abstract", decision: patch.title_abstract_decision, reason: patch.title_abstract_reason ?? record.title_abstract_reason, at: stamp() });
       if (patch.full_text_decision && patch.full_text_decision !== record.full_text_decision)
         history.push({ stage: "full_text", decision: patch.full_text_decision, reason: patch.full_text_reason ?? record.full_text_reason, at: stamp() });
+      if (patch.title_abstract_reason !== undefined && patch.title_abstract_reason !== record.title_abstract_reason && !patch.title_abstract_decision)
+        history.push({ stage: "title_abstract", decision: record.title_abstract_decision, reason: patch.title_abstract_reason, at: stamp() });
+      if (patch.full_text_reason !== undefined && patch.full_text_reason !== record.full_text_reason && !patch.full_text_decision)
+        history.push({ stage: "full_text", decision: record.full_text_decision, reason: patch.full_text_reason, at: stamp() });
       return { ...record, ...patch, decision_history: history, updated_at: stamp() };
     }) }));
     setMessage("");
