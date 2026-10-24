@@ -121,6 +121,19 @@ Research Design & Methodology should read the protocol, screening dates/method a
 8. Changing a decision updates the flow summary and eligible-study set while preserving the audit trail.
 9. Tests cover duplicate prevention, state transitions, required reasons, project authorization, count calculations, and source/evidence link integrity.
 
-## Implementation note
+## Implementation status (initial vertical slice)
 
-This document defines the target architecture, not a claim that the feature is already implemented. Before coding, inspect the current frontend routes, API schemas, persistence model and project-module patterns; extend those conventions rather than creating parallel infrastructure. Implement incrementally with tests and review the generated Methods text against the protocol before release.
+The first implementation is on the feature branch for review. It extends the existing project-module registry and DynamoDB-backed module persistence rather than adding a second data store.
+
+Implemented in this branch:
+- A project-level Study Screening editor that links to existing Literature & Evidence source IDs and prevents adding the same source twice in one screening log.
+- Separate title/abstract and full-text decisions, controlled exclusion reasons, retrieval-attempt notes for records marked not retrieved, protocol snapshots on records, and decision-history entries.
+- Server-side checks for valid decisions, source linkage, duplicate source IDs, required exclusion reasons, valid stage progression, and retrieval attempts when full text is not retrieved.
+- Calculated provisional flow counts displayed in Study Screening and read by Research Design & Methodology.
+- A Manuscript Production editor that reads the same screening records, derives an editable study-selection narrative, and lists reports currently marked included.
+
+Known limitations before production use:
+- Search/database provenance, deduplication counts, multiple reports linked to a single underlying study, exports, authenticated reviewer identity, and immutable server-side audit events are not implemented.
+- Protocol version is currently a simple initial value; full protocol version management and reviewer-independent dual screening are future work.
+- The manuscript editor is an initial integration slice, not a complete manuscript authoring/export system.
+- The branch must pass the deployment preview and be reviewed before merging. Screening counts must be checked against the real search log before being reported in a manuscript.
