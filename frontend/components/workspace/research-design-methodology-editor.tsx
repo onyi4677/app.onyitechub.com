@@ -98,7 +98,7 @@ export default function ResearchDesignMethodologyEditor({
           excluded: records.filter((r) => r.title_abstract_decision === "exclude").length,
           assessed: records.filter((r) => r.full_text_decision === "include" || r.full_text_decision === "exclude").length,
           included: records.filter((r) => r.full_text_decision === "include").length,
-          unresolved: records.filter((r) => r.title_abstract_decision === "not_screened" || r.title_abstract_decision === "maybe" || r.full_text_decision === "not_assessed").length,
+          unresolved: records.filter((r) => r.title_abstract_decision === "not_screened" || r.title_abstract_decision === "maybe" || (r.title_abstract_decision !== "exclude" && r.full_text_decision === "not_assessed")).length,
         });
       })
       .catch((err) => {
