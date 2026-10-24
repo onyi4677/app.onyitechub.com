@@ -56,6 +56,14 @@ def build_canonical_sources(project: dict[str, Any]) -> list[dict[str, Any]]:
                 "keywords": source.get("keywords") or [], "verified": bool(source.get("verified")), "identity_key": key,
             }
             order.append(key)
+        else:
+            item = grouped[key]
+            if source["source_id"] not in item["aliases"]:
+                item["aliases"].append(source["source_id"])
+            if source["source_id"] not in item["literature_source_ids"]:
+                item["literature_source_ids"].append(source["source_id"])
+            # Preserve the first existing literature ID as canonical; other
+            # duplicate IDs remain resolvable as aliases for legacy evidence.
 
     for reference in refs_module.get("references") or []:
         if not isinstance(reference, dict) or not reference.get("reference_id"):
