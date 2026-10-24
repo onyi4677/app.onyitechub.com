@@ -8,7 +8,7 @@ type TADecision = "not_screened" | "include" | "exclude" | "maybe";
 type FTDecision = "not_assessed" | "include" | "exclude" | "not_retrieved";
 type Event = { stage: string; decision: string; reason: string; at: string };
 type RecordItem = {
-  screening_id: string; source_id: string; title_snapshot: string; citation_snapshot: string;
+  screening_id: string; source_id: string; title_snapshot: string; citation_snapshot: string; protocol_snapshot: string;
   title_abstract_decision: TADecision; title_abstract_reason: string;
   full_text_decision: FTDecision; full_text_reason: string; retrieval_attempts: string[];
   notes: string; decision_history: Event[]; created_at: string; updated_at: string;
@@ -27,7 +27,7 @@ function normalize(value: unknown): RecordItem | null {
   const r = value as Partial<RecordItem>;
   if (!r.screening_id || !r.source_id) return null;
   return { screening_id: r.screening_id, source_id: r.source_id, title_snapshot: r.title_snapshot || "",
-    citation_snapshot: r.citation_snapshot || "", title_abstract_decision: r.title_abstract_decision || "not_screened",
+    citation_snapshot: r.citation_snapshot || "", protocol_snapshot: r.protocol_snapshot || "", title_abstract_decision: r.title_abstract_decision || "not_screened",
     title_abstract_reason: r.title_abstract_reason || "", full_text_decision: r.full_text_decision || "not_assessed",
     full_text_reason: r.full_text_reason || "", retrieval_attempts: Array.isArray(r.retrieval_attempts) ? r.retrieval_attempts : [],
     notes: r.notes || "", decision_history: Array.isArray(r.decision_history) ? r.decision_history : [],
@@ -84,6 +84,7 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
     const citation = [source.authors?.join(", "), source.year, source.title, source.journal_or_publisher, source.doi ? "DOI: " + source.doi : ""].filter(Boolean).join(". ");
     setData((current) => ({ ...current, records: [...current.records, {
       screening_id: makeId(), source_id: source.source_id, title_snapshot: source.title, citation_snapshot: citation,
+      protocol_snapshot: [methodology.review_question, methodology.pcc_population, methodology.pcc_concept, methodology.pcc_context, methodology.eligibility_criteria].filter(Boolean).map(String).join("\\n\\n"),
       title_abstract_decision: "not_screened", title_abstract_reason: "", full_text_decision: "not_assessed",
       full_text_reason: "", retrieval_attempts: [], notes: "", decision_history: [], created_at: timestamp, updated_at: timestamp,
     }] }));
@@ -160,6 +161,7 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
     </section>
     {data.records.map((record) => <section className="card editor-section" key={record.screening_id}>
       <div className="eyebrow">Screening record · {record.screening_id.slice(0, 8)}</div><h3>{record.title_snapshot}</h3><p className="muted">{record.citation_snapshot}</p>
+      {record.protocol_snapshot && <details><summary>Eligibility protocol snapshot at record creation</summary><p>{record.protocol_snapshot}</p></details>}
       <label>Title/abstract decision<select value={record.title_abstract_decision} onChange={(e) => updateRecord(record.screening_id, { title_abstract_decision: e.target.value as TADecision })}>
         <option value="not_screened">Not screened</option><option value="include">Advance to full text</option><option value="maybe">Maybe / retrieve for assessment</option><option value="exclude">Exclude at title/abstract</option>
       </select></label>
