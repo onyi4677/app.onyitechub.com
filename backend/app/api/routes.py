@@ -367,6 +367,56 @@ def update_project_module(
             detail="Unknown research module",
         )
 
+    if module_key == "study_screening":
+        records = payload.content.get("records", [])
+        if not isinstance(records, list):
+            raise HTTPException(status_code=422, detail="Screening records must be a list")
+
+        literature = _project_module_or_empty(project_id, "literature_evidence")
+        known_source_ids = {
+            source.get("source_id")
+            for source in literature.get("sources", [])
+            if isinstance(source, dict)
+        }
+        seen_source_ids: set[str] = set()
+        allowed_ta = {"not_screened", "include", "exclude", "maybe"}
+        allowed_ft = {"not_assessed", "include", "exclude", "not_retrieved"}
+
+        for record in records:
+            if not isinstance(record, dict):
+                raise HTTPException(status_code=422, detail="Each screening record must be an object")
+            source_id = record.get("source_id")
+            if not isinstance(source_id, str) or source_id not in known_source_ids:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Each screening record must link to an existing Literature & Evidence source",
+                )
+            if source_id in seen_source_ids:
+                raise HTTPException(
+                    status_code=422,
+                    detail="A literature source can appear only once in this screening log",
+                )
+            seen_source_ids.add(source_id)
+
+            ta_decision = record.get("title_abstract_decision", "not_screened")
+            ft_decision = record.get("full_text_decision", "not_assessed")
+            if ta_decision not in allowed_ta or ft_decision not in allowed_ft:
+                raise HTTPException(status_code=422, detail="Invalid screening decision value")
+            if ta_decision == "exclude" and not str(record.get("title_abstract_reason") or "").strip():
+                raise HTTPException(status_code=422, detail="Title/abstract exclusions require a reason")
+            if ft_decision == "exclude" and not str(record.get("full_text_reason") or "").strip():
+                raise HTTPException(status_code=422, detail="Full-text exclusions require a reason")
+            if ft_decision != "not_assessed" and ta_decision not in {"include", "maybe"}:
+                raise HTTPException(
+                    status_code=422,
+                    detail="A full-text decision requires a title/abstract decision to advance the record",
+                )
+            if ft_decision == "not_retrieved" and not record.get("retrieval_attempts"):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Records marked not retrieved require documented retrieval attempts",
+                )
+
     content = save_module(
         project_id,
         module_key,
