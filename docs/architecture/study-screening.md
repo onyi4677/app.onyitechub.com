@@ -137,3 +137,25 @@ Known limitations before production use:
 - Protocol version is currently a simple initial value; full protocol version management and reviewer-independent dual screening are future work.
 - The manuscript editor is an initial integration slice, not a complete manuscript authoring/export system.
 - The branch must pass the deployment preview and be reviewed before merging. Screening counts must be checked against the real search log before being reported in a manuscript.
+
+
+## Implemented integration contract (2026-10)
+
+The current codebase has two legacy metadata collections: literature_evidence.sources (IDs: source_id) and references_citations.references (IDs: reference_id). Neither collection is deleted or rewritten by the screening integration. The API now exposes a read-only project-level source registry at:
+
+- GET /api/projects/{project_id}/research-sources
+
+The registry groups records by normalized DOI where available, otherwise by normalized title + year + first author. If a work already has a Literature & Evidence source, that existing source_id remains canonical so existing evidence and claim links remain stable. If a work exists only in References & Citations, its reference_id is used as the canonical ID. The response contains aliases and both legacy IDs to support cross-module navigation.
+
+Study Screening and Literature & Evidence evidence/claim selectors use this unified projection. New screening records store canonical IDs. New evidence and claim links submitted with an alias are normalized to the canonical ID by the API. The existing reference IDs inside in-text citation mappings are not rewritten. Existing duplicate legacy rows remain available for safe, explicit cleanup; this integration does not silently delete or merge them.
+
+Important limits: identity matching is deterministic but not a substitute for a human duplicate review; records without a DOI rely on title/year/first-author matching. Protocol history remains a project log, not an immutable regulatory audit trail. Screening counts currently cover only records added to the screening log, not database search totals or study-vs-report deduplication.
+
+### Acceptance checks
+
+1. A DOI-identical work present in both legacy collections appears once in the unified picker.
+2. Its canonical ID is the existing Literature & Evidence source_id; its reference ID remains available as an alias.
+3. A reference-only work is available for screening and evidence charting without first creating another Literature & Evidence source.
+4. Saving screening, evidence, or claims using a recognized alias succeeds and normalizes new links to the canonical ID.
+5. Existing evidence IDs, claim IDs, citation IDs, and citation reference IDs remain unchanged.
+6. The unified source endpoint is read-only and does not migrate or delete user data.
