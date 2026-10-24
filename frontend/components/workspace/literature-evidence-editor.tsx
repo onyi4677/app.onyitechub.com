@@ -12,6 +12,7 @@ import {
   type LiteratureSourceInput,
   type EvidenceItem,
 } from "../../lib/api/literature";
+import { getProjectResearchSources, type CanonicalResearchSource } from "../../lib/api/modules";
 
 function normaliseDoi(value?: string | null) {
   return (value || "")
@@ -90,6 +91,7 @@ export default function LiteratureEvidenceEditor({
   projectId: string;
 }) {
   const [sources, setSources] = useState<LiteratureSource[]>([]);
+  const [registrySources, setRegistrySources] = useState<CanonicalResearchSource[]>([]);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [claims, setClaims] = useState<LiteratureClaim[]>([]);
   const [synthesis, setSynthesis] = useState("");
@@ -108,9 +110,10 @@ export default function LiteratureEvidenceEditor({
 
   async function load() {
     try {
-      const w = await getLiteratureWorkspace(projectId);
+      const [w, registry] = await Promise.all([getLiteratureWorkspace(projectId), getProjectResearchSources(projectId)]);
 
       setSources(w.sources);
+      setRegistrySources(registry.sources);
       setEvidence(w.evidence_items);
       setClaims(w.claims);
       setSynthesis(w.synthesis);
@@ -721,10 +724,9 @@ export default function LiteratureEvidenceEditor({
           >
             <option value="">Select a source</option>
 
-            {sources.map((s) => (
-              <option key={s.source_id} value={s.source_id}>
-                {s.authors.join(", ")} ({s.year ?? "n.d."}) —{" "}
-                {s.title}
+            {registrySources.map((s) => (
+              <option key={s.canonical_source_id} value={s.canonical_source_id}>
+                {s.authors.join(", ")} ({s.year ?? "n.d."}) — {s.title}{s.reference_ids.length && s.literature_source_ids.length ? " · linked across modules" : s.reference_ids.length ? " · reference library" : ""}
               </option>
             ))}
           </select>
@@ -930,8 +932,8 @@ export default function LiteratureEvidenceEditor({
               })
             }
           >
-            {sources.map((s) => (
-              <option key={s.source_id} value={s.source_id}>
+            {registrySources.map((s) => (
+              <option key={s.canonical_source_id} value={s.canonical_source_id}>
                 {s.authors.join(", ")} ({s.year ?? "n.d."}) — {s.title}
               </option>
             ))}
