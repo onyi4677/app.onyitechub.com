@@ -8,12 +8,17 @@ MODULES: dict[str, dict[str, Any]] = {
     },
     "literature_evidence": {
         "name": "Literature & Evidence",
-        "description": "Evidence retrieval, source verification, evidence extraction, synthesis and research gap development.",
+        "description": "Shared project source registry, source verification, evidence extraction, claims, synthesis and research gap development.",
+        "status": "active",
+    },
+    "study_screening": {
+        "name": "Study Screening",
+        "description": "Protocol-linked screening against the shared project source registry, with staged decisions, exclusion reasons, retrieval attempts, audit history and calculated selection counts.",
         "status": "active",
     },
     "references_citations": {
         "name": "References & Citations",
-        "description": "Reference library, in-text citation mapping, citation styles and reference integrity checks.",
+        "description": "Bibliographic metadata and in-text citation mapping connected to the shared project source registry, citation styles and integrity checks.",
         "status": "active",
     },
     "methodology": {"name": "Research Design & Methodology", "description": "Design, setting, population, sampling, sample size, ethics and analysis plan.", "status": "planned"},

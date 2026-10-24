@@ -83,12 +83,23 @@ export default function ResearchDesignMethodologyEditor({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [screeningCounts, setScreeningCounts] = useState<{ records: number; screened: number; excluded: number; assessed: number; included: number; unresolved: number } | null>(null);
 
   useEffect(() => {
     let active = true;
-    getProjectModule(projectId, moduleKey)
-      .then((result) => {
-        if (active) setForm(normalize(result.content || {}));
+    Promise.all([getProjectModule(projectId, moduleKey), getProjectModule(projectId, "study_screening")])
+      .then(([result, screening]) => {
+        if (!active) return;
+        setForm(normalize(result.content || {}));
+        const records = Array.isArray(screening.content?.records) ? screening.content.records as Record<string, unknown>[] : [];
+        setScreeningCounts({
+          records: records.length,
+          screened: records.filter((r) => r.title_abstract_decision !== "not_screened").length,
+          excluded: records.filter((r) => r.title_abstract_decision === "exclude").length,
+          assessed: records.filter((r) => r.full_text_decision === "include" || r.full_text_decision === "exclude").length,
+          included: records.filter((r) => r.full_text_decision === "include").length,
+          unresolved: records.filter((r) => r.title_abstract_decision === "not_screened" || r.title_abstract_decision === "maybe" || (r.title_abstract_decision !== "exclude" && r.full_text_decision === "not_assessed")).length,
+        });
       })
       .catch((err) => {
         if (active) setError(err instanceof Error ? err.message : "Could not load the methodology module.");
@@ -128,6 +139,23 @@ export default function ResearchDesignMethodologyEditor({
         <h3>Research Design &amp; Methodology</h3>
         <p className="muted">Use this workspace to draft and save the review protocol. This project maps existing literature; it is not a primary study recruiting participants.</p>
         <p className="muted">Geographical scope: Adamawa, Bauchi, Borno, Gombe, Taraba, and Yobe States. Provisional publication window: 1 January 2020 to the final search date. Language: English.</p>
+      </div>
+
+      <div className="card editor-section">
+        <div className="eyebrow">Linked screening outputs</div>
+        <h3>Study-selection progress</h3>
+        {screeningCounts && screeningCounts.records > 0 ? (
+          <>
+            <div className="statrow">
+              <div className="stat"><span className="muted">Records in screening log</span><strong>{screeningCounts.records}</strong></div>
+              <div className="stat"><span className="muted">Title/abstract screened</span><strong>{screeningCounts.screened}</strong></div>
+              <div className="stat"><span className="muted">Full-text assessed</span><strong>{screeningCounts.assessed}</strong></div>
+              <div className="stat"><span className="muted">Included reports</span><strong>{screeningCounts.included}</strong></div>
+              <div className="stat"><span className="muted">Unresolved</span><strong>{screeningCounts.unresolved}</strong></div>
+            </div>
+            <p className="muted">These values are read from Study Screening, not manually re-entered. Treat the selection totals as provisional until unresolved records and search provenance are addressed.</p>
+          </>
+        ) : <p className="muted">No screening records are linked yet. Add source records and record screening decisions in the Study Screening module; the counts will appear here automatically.</p>}
       </div>
 
       {fields.map((field) => (
