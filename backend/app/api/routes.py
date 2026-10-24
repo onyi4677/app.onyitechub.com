@@ -393,7 +393,12 @@ def update_project_module(
         project = project_response.get("Item")
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        known_source_ids = {source["canonical_source_id"] for source in build_canonical_sources(project)}
+        canonical_sources = build_canonical_sources(project)
+        source_id_map = {
+            alias: source["canonical_source_id"]
+            for source in canonical_sources
+            for alias in source.get("aliases", [])
+        }
         seen_source_ids: set[str] = set()
         allowed_ta = {"not_screened", "include", "exclude", "maybe"}
         allowed_ft = {"not_assessed", "include", "exclude", "not_retrieved"}
@@ -402,11 +407,13 @@ def update_project_module(
             if not isinstance(record, dict):
                 raise HTTPException(status_code=422, detail="Each screening record must be an object")
             source_id = record.get("source_id")
-            if not isinstance(source_id, str) or source_id not in known_source_ids:
+            if not isinstance(source_id, str) or source_id not in source_id_map:
                 raise HTTPException(
                     status_code=422,
-                    detail="Each screening record must link to an existing Literature & Evidence source",
+                    detail="Each screening record must link to an existing project source",
                 )
+            source_id = source_id_map[source_id]
+            record["source_id"] = source_id
             if source_id in seen_source_ids:
                 raise HTTPException(
                     status_code=422,
