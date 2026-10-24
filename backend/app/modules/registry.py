@@ -11,6 +11,11 @@ MODULES: dict[str, dict[str, Any]] = {
         "description": "Evidence retrieval, source verification, evidence extraction, synthesis and research gap development.",
         "status": "active",
     },
+    "study_screening": {
+        "name": "Study Screening",
+        "description": "Protocol-linked title/abstract and full-text screening with exclusion reasons, retrieval attempts and calculated study-selection counts.",
+        "status": "active",
+    },
     "references_citations": {
         "name": "References & Citations",
         "description": "Reference library, in-text citation mapping, citation styles and reference integrity checks.",
