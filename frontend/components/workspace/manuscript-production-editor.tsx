@@ -15,7 +15,7 @@ function summarize(records: ScreeningRecord[]): ScreeningCounts {
     assessed: records.filter((r) => ["include", "exclude"].includes(r.full_text_decision)).length,
     fullExcluded: records.filter((r) => r.full_text_decision === "exclude").length,
     included: records.filter((r) => r.full_text_decision === "include").length,
-    unresolved: records.filter((r) => r.title_abstract_decision === "not_screened" || r.title_abstract_decision === "maybe" || r.full_text_decision === "not_assessed").length,
+    unresolved: records.filter((r) => r.title_abstract_decision === "not_screened" || r.title_abstract_decision === "maybe" || (r.title_abstract_decision !== "exclude" && r.full_text_decision === "not_assessed")).length,
   };
 }
 function makeNarrative(c: ScreeningCounts) {
