@@ -17,6 +17,7 @@ from app.modules.research_foundation import get_research_foundation_spec
 from app.modules.registry import get_modules
 from app.services.analysis import analyze_idea
 from app.services.project_modules import get_module, save_module
+from app.services.canonical_sources import build_canonical_sources, canonical_source_id
 
 
 router = APIRouter(prefix="/api")
@@ -338,6 +339,19 @@ def get_project(project_id: str) -> dict[str, Any]:
 # Research project modules
 # ---------------------------------------------------------------------
 
+@router.get("/projects/{project_id}/research-sources")
+def project_research_sources(project_id: str) -> dict[str, Any]:
+    try:
+        response = projects_table.get_item(Key={"id": project_id})
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
+    project = response.get("Item")
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    sources = build_canonical_sources(project)
+    return {"sources": sources, "count": len(sources)}
+
+
 @router.get("/projects/{project_id}/modules/{module_key}")
 def get_project_module(
     project_id: str,
@@ -372,12 +386,14 @@ def update_project_module(
         if not isinstance(records, list):
             raise HTTPException(status_code=422, detail="Screening records must be a list")
 
-        literature = _project_module_or_empty(project_id, "literature_evidence")
-        known_source_ids = {
-            source.get("source_id")
-            for source in literature.get("sources", [])
-            if isinstance(source, dict)
-        }
+        try:
+            project_response = projects_table.get_item(Key={"id": project_id})
+        except ClientError as exc:
+            raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
+        project = project_response.get("Item")
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        known_source_ids = {source["canonical_source_id"] for source in build_canonical_sources(project)}
         seen_source_ids: set[str] = set()
         allowed_ta = {"not_screened", "include", "exclude", "maybe"}
         allowed_ft = {"not_assessed", "include", "exclude", "not_retrieved"}
@@ -467,21 +483,19 @@ def add_evidence_item(
         "literature_evidence",
     )
 
-    source_ids = {
-        source.get("source_id")
-        for source in module.get("sources", [])
-    }
-
-    if payload.source_id not in source_ids:
-        raise HTTPException(
-            status_code=422,
-            detail="Evidence must reference an existing literature source",
-        )
-
-    item = {
-        "evidence_id": str(uuid4()),
-        **payload.model_dump(),
-    }
+    try:
+        project_response = projects_table.get_item(Key={"id": project_id})
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
+    project = project_response.get("Item")
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    canonical_id = canonical_source_id(project, payload.source_id)
+    if not canonical_id:
+        raise HTTPException(status_code=422, detail="Evidence must reference an existing canonical source")
+    evidence_payload = payload.model_dump()
+    evidence_payload["source_id"] = canonical_id
+    item = {"evidence_id": str(uuid4()), **evidence_payload}
 
     saved_item = _append_to_module(
         project_id,
@@ -511,10 +525,14 @@ def add_literature_claim(
         for evidence in module.get("evidence_items", [])
     }
 
-    source_ids = {
-        source.get("source_id")
-        for source in module.get("sources", [])
-    }
+    try:
+        project_response = projects_table.get_item(Key={"id": project_id})
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
+    project = project_response.get("Item")
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    canonical_ids = [canonical_source_id(project, source_id) for source_id in payload.source_ids]
 
     if any(
         evidence_id not in evidence_ids
@@ -525,19 +543,15 @@ def add_literature_claim(
             detail="Claim references unknown evidence",
         )
 
-    if any(
-        source_id not in source_ids
-        for source_id in payload.source_ids
-    ):
+    if any(source_id is None for source_id in canonical_ids):
         raise HTTPException(
             status_code=422,
             detail="Claim references unknown source",
         )
 
-    item = {
-        "claim_id": str(uuid4()),
-        **payload.model_dump(),
-    }
+    claim_payload = payload.model_dump()
+    claim_payload["source_ids"] = list(dict.fromkeys(source_id for source_id in canonical_ids if source_id))
+    item = {"claim_id": str(uuid4()), **claim_payload}
 
     saved_item = _append_to_module(
         project_id,
