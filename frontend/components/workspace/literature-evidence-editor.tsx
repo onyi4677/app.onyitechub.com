@@ -848,8 +848,8 @@ export default function LiteratureEvidenceEditor({
           <div className="evidence-list">
             <h3>Saved evidence items</h3>
             {evidence.map((item, index) => {
-              const linkedSource = sources.find(
-                (s) => s.source_id === item.source_id
+              const linkedSource = registrySources.find(
+                (s) => s.canonical_source_id === item.source_id || s.aliases.includes(item.source_id)
               );
               return (
                 <div className="notice" key={item.evidence_id}>
@@ -989,8 +989,8 @@ export default function LiteratureEvidenceEditor({
           <div className="evidence-list">
             <h3>Saved evidence-backed claims</h3>
             {claims.map((item, index) => {
-              const linkedSources = sources.filter((s) =>
-                (item.source_ids ?? []).includes(s.source_id)
+              const linkedSources = registrySources.filter((s) =>
+                (item.source_ids ?? []).some((id) => s.canonical_source_id === id || s.aliases.includes(id))
               );
               const linkedEvidence = evidence.filter((evItem) =>
                 (item.evidence_ids ?? []).includes(evItem.evidence_id)
