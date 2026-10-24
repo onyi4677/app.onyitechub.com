@@ -84,7 +84,7 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
     const citation = [source.authors?.join(", "), source.year, source.title, source.journal_or_publisher, source.doi ? "DOI: " + source.doi : ""].filter(Boolean).join(". ");
     setData((current) => ({ ...current, records: [...current.records, {
       screening_id: makeId(), source_id: source.source_id, title_snapshot: source.title, citation_snapshot: citation,
-      protocol_snapshot: [methodology.review_question, methodology.pcc_population, methodology.pcc_concept, methodology.pcc_context, methodology.eligibility_criteria].filter(Boolean).map(String).join("\\n\\n"),
+      protocol_snapshot: [methodology.review_question, methodology.pcc_population, methodology.pcc_concept, methodology.pcc_context, methodology.eligibility_criteria].filter(Boolean).map(String).join("\n\n"),
       title_abstract_decision: "not_screened", title_abstract_reason: "", full_text_decision: "not_assessed",
       full_text_reason: "", retrieval_attempts: [], notes: "", decision_history: [], created_at: timestamp, updated_at: timestamp,
     }] }));
