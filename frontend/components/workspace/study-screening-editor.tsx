@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getLiteratureWorkspace, type LiteratureSource } from "../../lib/api/literature";
-import { getProjectModule, saveProjectModule } from "../../lib/api/modules";
+import { getProjectModule, getProjectResearchSources, saveProjectModule, type CanonicalResearchSource } from "../../lib/api/modules";
 
 type TADecision = "not_screened" | "include" | "exclude" | "maybe";
 type FTDecision = "not_assessed" | "include" | "exclude" | "not_retrieved";
@@ -35,7 +34,7 @@ function normalize(value: unknown): RecordItem | null {
 }
 
 export default function StudyScreeningEditor({ projectId }: { projectId: string }) {
-  const [sources, setSources] = useState<LiteratureSource[]>([]);
+  const [sources, setSources] = useState<CanonicalResearchSource[]>([]);
   const [methodology, setMethodology] = useState<Record<string, unknown>>({});
   const [data, setData] = useState<ScreeningData>({ records: [], protocol_version: "1" });
   const [selected, setSelected] = useState("");
@@ -46,10 +45,10 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
 
   useEffect(() => {
     let active = true;
-    Promise.all([getLiteratureWorkspace(projectId), getProjectModule(projectId, "study_screening"), getProjectModule(projectId, "methodology")])
-      .then(([literature, screening, method]) => {
+    Promise.all([getProjectResearchSources(projectId), getProjectModule(projectId, "study_screening"), getProjectModule(projectId, "methodology")])
+      .then(([registry, screening, method]) => {
         if (!active) return;
-        setSources(literature.sources || []);
+        setSources(registry.sources || []);
         setMethodology(method.content || {});
         const raw = screening.content || {};
         setData({ records: Array.isArray(raw.records) ? raw.records.map(normalize).filter((r): r is RecordItem => Boolean(r)) : [],
@@ -78,12 +77,12 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
   }, [data.records]);
 
   function addSource() {
-    const source = sources.find((s) => s.source_id === selected);
-    if (!source || linkedIds.has(source.source_id)) return;
+    const source = sources.find((s) => s.canonical_source_id === selected);
+    if (!source || linkedIds.has(source.canonical_source_id)) return;
     const timestamp = stamp();
     const citation = [source.authors?.join(", "), source.year, source.title, source.journal_or_publisher, source.doi ? "DOI: " + source.doi : ""].filter(Boolean).join(". ");
     setData((current) => ({ ...current, records: [...current.records, {
-      screening_id: makeId(), source_id: source.source_id, title_snapshot: source.title, citation_snapshot: citation,
+      screening_id: makeId(), source_id: source.canonical_source_id, title_snapshot: source.title, citation_snapshot: citation,
       protocol_snapshot: [methodology.review_question, methodology.pcc_population, methodology.pcc_concept, methodology.pcc_context, methodology.eligibility_criteria].filter(Boolean).map(String).join("\n\n"),
       title_abstract_decision: "not_screened", title_abstract_reason: "", full_text_decision: "not_assessed",
       full_text_reason: "", retrieval_attempts: [], notes: "", decision_history: [], created_at: timestamp, updated_at: timestamp,
@@ -128,7 +127,7 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
   return <div className="module-editor">
     <section className="card editor-section">
       <div className="eyebrow">Protocol-linked workflow</div><h3>Study Screening</h3>
-      <p className="muted">Screen records already saved in Literature &amp; Evidence. Each screening record links to the canonical source ID; adding it here does not create another reference.</p>
+      <p className="muted">Screen records from the unified project source registry. A work present in References &amp; Citations and Literature &amp; Evidence appears once, with existing evidence links preserved.</p>
       <div className="notice">
         <strong>Eligibility protocol summary</strong>
         <p><b>Population:</b> {String(methodology.pcc_population || "Not entered in Research Design & Methodology yet.")}</p>
@@ -140,10 +139,10 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
     </section>
     <section className="card editor-section">
       <div className="eyebrow">Reuse existing source records</div><h3>Add a record to screening</h3>
-      {sources.length === 0 ? <p className="muted">No sources found. Add source metadata in Literature &amp; Evidence first.</p> : <div className="form-grid">
-        <label>Existing literature source<select value={selected} onChange={(e) => setSelected(e.target.value)}>
+      {sources.length === 0 ? <p className="muted">No sources found. Add a work in References &amp; Citations or Literature &amp; Evidence first.</p> : <div className="form-grid">
+        <label>Existing project source<select value={selected} onChange={(e) => setSelected(e.target.value)}>
           <option value="">Choose a source…</option>
-          {sources.filter((s) => !linkedIds.has(s.source_id)).map((s) => <option key={s.source_id} value={s.source_id}>{s.year || "Year n/r"} — {s.title}</option>)}
+          {sources.filter((s) => !linkedIds.has(s.canonical_source_id)).map((s) => <option key={s.canonical_source_id} value={s.canonical_source_id}>{s.year || "Year n/r"} — {s.title}{s.reference_ids.length && s.literature_source_ids.length ? " · linked across modules" : s.reference_ids.length ? " · reference library" : ""}</option>)}
         </select></label>
         <div style={{ display: "flex", alignItems: "end" }}><button className="button" type="button" disabled={!selected} onClick={addSource}>Add to screening</button></div>
       </div>}
