@@ -40,3 +40,14 @@ def test_title_year_with_different_author_or_doi_is_review_candidate():
 
 def test_normalise_text_handles_unicode_and_punctuation():
     assert normalise_text("A—B: ‘C’") == "a b c"
+
+
+
+def test_same_metadata_with_conflicting_dois_is_not_auto_classified_as_duplicate():
+    records = [
+        {"reference_id": "a", "doi": "10.1234/one", "title": "Same Paper", "year": 2021, "authors": ["Smith, A"]},
+        {"reference_id": "b", "doi": "10.1234/two", "title": "Same Paper", "year": 2021, "authors": ["Smith, A"]},
+    ]
+    report = duplicate_report(records, "reference_id")
+    assert report["duplicate_records"] == []
+    assert len(report["possible_duplicate_groups"]) == 1
