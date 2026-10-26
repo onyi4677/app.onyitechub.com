@@ -371,7 +371,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
           const match = strongMatches[0];
           if (match.source_id && match.source_id !== source.source_id) {
             ambiguousMatches += 1;
-          } else if (match.source_id === source.source_id || match.reference_id === source.source_id) {
+          } else if (match.source_id === source.source_id) {
             alreadyLinked += 1;
           } else {
             const index = nextReferences.findIndex((reference) => reference.reference_id === match.reference_id);
@@ -531,7 +531,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
               <strong>{reference.title}</strong>
               <p>{reference.authors.join("; ")}{reference.year ? ` (${reference.year})` : ""}</p>
               <p className="muted">{[reference.journal_or_book, reference.volume ? `Vol. ${reference.volume}` : "", reference.issue ? `Issue ${reference.issue}` : "", reference.pages ? `pp. ${reference.pages}` : ""].filter(Boolean).join(", ")}</p>
-              <p className="muted">Literature source link: {reference.source_id || (workspace.references.some((item) => item.reference_id === reference.reference_id && item.reference_id.startsWith("source-")) ? "Linked by source ID" : "Not explicitly linked")}</p>
+              <p className="muted">Literature source ID: {reference.source_id || "Not explicitly linked; run the integrity check to review matches"}</p>
               {reference.doi && <p><a href={reference.doi.startsWith("http") ? reference.doi : `https://doi.org/${reference.doi.replace(/^doi:\s*/i, "")}`} target="_blank" rel="noreferrer">DOI: {reference.doi}</a></p>}
               {reference.url && <p><a href={reference.url} target="_blank" rel="noreferrer">Open source</a></p>}
               <div className="form-row">
