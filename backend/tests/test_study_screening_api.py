@@ -79,15 +79,15 @@ class StudyScreeningApiTests(unittest.TestCase):
     def update(self, records):
         return update_project_module(
             "project-1",
-            "study_screening",
-            ModuleUpdateRequest(content={"records": records, "protocol_version": "1"}),
+            "methodology",
+            ModuleUpdateRequest(content={"study_screening": {"records": records, "protocol_version": "1"}}),
         )
 
     def test_valid_record_saves_and_resolves_reference_alias_to_literature_id(self):
         response = self.update([record(source_id="ref-1")])
 
         self.assertEqual(response["status"], "saved")
-        saved_records = self.save_module.call_args.args[2]["records"]
+        saved_records = self.save_module.call_args.args[2]["study_screening"]["records"]
         self.assertEqual(saved_records[0]["source_id"], "lit-1")
         self.save_module.assert_called_once()
 
