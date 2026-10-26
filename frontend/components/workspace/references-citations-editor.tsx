@@ -531,6 +531,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
               <strong>{reference.title}</strong>
               <p>{reference.authors.join("; ")}{reference.year ? ` (${reference.year})` : ""}</p>
               <p className="muted">{[reference.journal_or_book, reference.volume ? `Vol. ${reference.volume}` : "", reference.issue ? `Issue ${reference.issue}` : "", reference.pages ? `pp. ${reference.pages}` : ""].filter(Boolean).join(", ")}</p>
+              <p className="muted">Literature source link: {reference.source_id || (workspace.references.some((item) => item.reference_id === reference.reference_id && item.reference_id.startsWith("source-")) ? "Linked by source ID" : "Not explicitly linked")}</p>
               {reference.doi && <p><a href={reference.doi.startsWith("http") ? reference.doi : `https://doi.org/${reference.doi.replace(/^doi:\s*/i, "")}`} target="_blank" rel="noreferrer">DOI: {reference.doi}</a></p>}
               {reference.url && <p><a href={reference.url} target="_blank" rel="noreferrer">Open source</a></p>}
               <div className="form-row">
@@ -580,6 +581,43 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
           <p>Duplicate literature sources: {Array.isArray(integrity.duplicate_literature_sources) ? integrity.duplicate_literature_sources.length : 0} · Possible source matches: {Array.isArray(integrity.possible_duplicate_literature_sources) ? integrity.possible_duplicate_literature_sources.length : 0}</p>
           <p>Cross-module identity matches: {Array.isArray(integrity.cross_module_matches) ? integrity.cross_module_matches.length : 0} · References without source link: {Array.isArray(integrity.references_without_literature_source_link) ? integrity.references_without_literature_source_link.length : 0} · Sources without reference link: {Array.isArray(integrity.literature_sources_without_reference_link) ? integrity.literature_sources_without_reference_link.length : 0}</p>
           <p>Unresolved citation links: {Array.isArray(integrity.orphan_citations) ? integrity.orphan_citations.length : 0}</p>
+          {Array.isArray(integrity.cross_module_matches) && integrity.cross_module_matches.length > 0 && (
+            <div>
+              <strong>Source-to-reference match review</strong>
+              <ul>
+                {integrity.cross_module_matches.slice(0, 30).map((match, index) => (
+                  <li key={String(match.reference_id) + "-" + String(match.source_id) + "-" + index}>
+                    {String(match.reference_title || "Untitled reference")} ↔ {String(match.source_title || "Untitled source")} — {String(match.match_type)}
+                  </li>
+                ))}
+              </ul>
+              {integrity.cross_module_matches.length > 30 && <p className="muted">Showing the first 30 matches.</p>}
+            </div>
+          )}
+          {Array.isArray(integrity.possible_duplicate_groups) && integrity.possible_duplicate_groups.length > 0 && (
+            <div>
+              <strong>Reference groups needing manual review</strong>
+              <ul>
+                {integrity.possible_duplicate_groups.slice(0, 20).map((group, index) => (
+                  <li key={String(group.title) + "-" + index}>
+                    {String(group.title || "Untitled work")} ({String(group.year ?? "year unknown")}) — {String(group.reason || "Review metadata")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {Array.isArray(integrity.possible_duplicate_literature_sources) && integrity.possible_duplicate_literature_sources.length > 0 && (
+            <div>
+              <strong>Literature source groups needing manual review</strong>
+              <ul>
+                {integrity.possible_duplicate_literature_sources.slice(0, 20).map((group, index) => (
+                  <li key={String(group.title) + "-" + index}>
+                    {String(group.title || "Untitled work")} ({String(group.year ?? "year unknown")}) — {String(group.reason || "Review metadata")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>}
       </section>
     </div>
