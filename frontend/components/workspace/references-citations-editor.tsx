@@ -254,8 +254,11 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     const linkedCitations = workspace.in_text_citations.filter((citation) =>
       (citation.reference_ids || []).includes(reference.reference_id),
     );
+    const singleReferenceMappings = linkedCitations.filter(
+      (citation) => (citation.reference_ids || []).filter((id) => id !== reference.reference_id).length === 0,
+    ).length;
     const warning = linkedCitations.length
-      ? ` This reference is linked to ${linkedCitations.length} citation mapping(s). Deleting it will also permanently delete those mapped citations and their saved manuscript text, including any mapping that also links to other references.`
+      ? ` ${linkedCitations.length} citation mapping(s) use this reference. Multi-reference mappings will be preserved with this reference removed; ${singleReferenceMappings} mapping(s) that cite only this reference will be removed.`
       : "";
 
     const confirmed = window.confirm(
@@ -263,13 +266,16 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     );
     if (!confirmed) return;
 
-    const linkedCitationIds = new Set(linkedCitations.map((citation) => citation.citation_id));
+    const nextCitations = workspace.in_text_citations
+      .map((citation) => ({
+        ...citation,
+        reference_ids: (citation.reference_ids || []).filter((id) => id !== reference.reference_id),
+      }))
+      .filter((citation) => citation.reference_ids.length > 0);
     const nextWorkspace: Workspace = {
       ...workspace,
       references: workspace.references.filter((item) => item.reference_id !== reference.reference_id),
-      in_text_citations: workspace.in_text_citations.filter(
-        (citation) => !linkedCitationIds.has(citation.citation_id),
-      ),
+      in_text_citations: nextCitations,
     };
 
     const saved = await saveWorkspace(nextWorkspace);
@@ -281,7 +287,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
       setSelectedReferenceIds((current) => current.filter((id) => id !== reference.reference_id));
       setMessage(
         linkedCitations.length
-          ? `Reference deleted along with ${linkedCitations.length} linked citation mapping(s).`
+          ? `Reference deleted. Preserved ${linkedCitations.length - singleReferenceMappings} multi-reference citation mapping(s); removed ${singleReferenceMappings} mapping(s) with no remaining references.`
           : "Reference deleted.",
       );
     }
