@@ -17,6 +17,7 @@ from app.modules.research_foundation import get_research_foundation_spec
 from app.modules.registry import get_modules
 from app.services.analysis import analyze_idea
 from app.services.project_modules import get_module, save_module
+from app.services.reference_identity import duplicate_report
 
 
 router = APIRouter(prefix="/api")
@@ -610,30 +611,14 @@ def citation_integrity(
         if reference.get("reference_id") not in cited_ids
     ]
 
-    seen: dict[tuple[Any, ...], str | None] = {}
-    duplicates = []
-
-    for reference in references:
-        key = (
-            tuple(reference.get("authors", [])),
-            reference.get("year"),
-            (reference.get("title") or "").strip().lower(),
-        )
-
-        if key in seen:
-            duplicates.append(
-                {
-                    "reference_id": reference.get("reference_id"),
-                    "duplicate_of": seen[key],
-                }
-            )
-        else:
-            seen[key] = reference.get("reference_id")
+    duplicate_results = duplicate_report(references, "reference_id")
+    duplicates = duplicate_results["duplicate_records"]
+    possible_duplicate_groups = duplicate_results["possible_duplicate_groups"]
 
     report = {
         "status": (
             "pass"
-            if not orphan_citations and not duplicates
+            if not orphan_citations and not duplicates and not possible_duplicate_groups
             else "review_required"
         ),
         "citation_count": len(citations),
@@ -641,6 +626,7 @@ def citation_integrity(
         "orphan_citations": orphan_citations,
         "uncited_references": uncited_references,
         "duplicate_references": duplicates,
+        "possible_duplicate_groups": possible_duplicate_groups,
         "style": module.get("citation_style", "APA 7"),
     }
 
