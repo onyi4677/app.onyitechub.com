@@ -11,17 +11,12 @@ MODULES: dict[str, dict[str, Any]] = {
         "description": "Shared project source registry, source verification, evidence extraction, claims, synthesis and research gap development.",
         "status": "active",
     },
-    "study_screening": {
-        "name": "Study Screening",
-        "description": "Protocol-linked screening against the shared project source registry, with staged decisions, exclusion reasons, retrieval attempts, audit history and calculated selection counts.",
-        "status": "active",
-    },
     "references_citations": {
         "name": "References & Citations",
         "description": "Bibliographic metadata and in-text citation mapping connected to the shared project source registry, citation styles and integrity checks.",
         "status": "active",
     },
-    "methodology": {"name": "Research Design & Methodology", "description": "Design, setting, population, sampling, sample size, ethics and analysis plan.", "status": "planned"},
+    "methodology": {"name": "Research Design & Methodology", "description": "Review protocol, eligibility criteria, integrated two-stage study screening, selection counts, and analysis plan.", "status": "active"},
     "instruments": {"name": "Instruments & Data Collection", "description": "Validated instruments, questionnaire structure, consent and data collection plan.", "status": "planned"},
     "data": {"name": "Data Workspace", "description": "Raw data intake, validation, cleaning, metadata and dataset versions.", "status": "planned"},
     "analysis": {"name": "Statistical Analysis", "description": "Descriptive and inferential analysis with reproducible analysis specifications.", "status": "planned"},
