@@ -511,8 +511,11 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
         <div className="pagehead"><div><div className="eyebrow">Quality control</div><h3>Citation integrity</h3><p className="muted">Check for duplicate records, citations without references, and references that have not been cited.</p></div><button className="button" type="button" onClick={runIntegrityCheck} disabled={busy}>{busy ? "Checking..." : "Run integrity check"}</button></div>
         {integrity && <div className="notice">
           <strong>Status: {String(integrity.status || "checked")}</strong>
-          <p>References: {String(integrity.reference_count ?? 0)} · Citation mappings: {String(integrity.citation_count ?? 0)}</p>
-          <p>Uncited references: {Array.isArray(integrity.uncited_references) ? integrity.uncited_references.length : 0} · Duplicate records: {Array.isArray(integrity.duplicate_references) ? integrity.duplicate_references.length : 0} · Unresolved citation links: {Array.isArray(integrity.orphan_citations) ? integrity.orphan_citations.length : 0}</p>
+          <p>References: {String(integrity.reference_count ?? 0)} · Citation mappings: {String(integrity.citation_count ?? 0)} · Literature sources: {String(integrity.literature_source_count ?? 0)}</p>
+          <p>Uncited references: {Array.isArray(integrity.uncited_references) ? integrity.uncited_references.length : 0} · Duplicate references: {Array.isArray(integrity.duplicate_references) ? integrity.duplicate_references.length : 0} · Possible reference matches: {Array.isArray(integrity.possible_duplicate_groups) ? integrity.possible_duplicate_groups.length : 0}</p>
+          <p>Duplicate literature sources: {Array.isArray(integrity.duplicate_literature_sources) ? integrity.duplicate_literature_sources.length : 0} · Possible source matches: {Array.isArray(integrity.possible_duplicate_literature_sources) ? integrity.possible_duplicate_literature_sources.length : 0}</p>
+          <p>Cross-module identity matches: {Array.isArray(integrity.cross_module_matches) ? integrity.cross_module_matches.length : 0} · References without source link: {Array.isArray(integrity.references_without_literature_source_link) ? integrity.references_without_literature_source_link.length : 0} · Sources without reference link: {Array.isArray(integrity.literature_sources_without_reference_link) ? integrity.literature_sources_without_reference_link.length : 0}</p>
+          <p>Unresolved citation links: {Array.isArray(integrity.orphan_citations) ? integrity.orphan_citations.length : 0}</p>
         </div>}
       </section>
     </div>
