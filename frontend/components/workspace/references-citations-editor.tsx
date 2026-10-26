@@ -7,6 +7,7 @@ import { getLiteratureWorkspace } from "../../lib/api/literature";
 
 type ReferenceRecord = {
   reference_id: string;
+  source_id?: string | null;
   authors: string[];
   year: number | null;
   title: string;
@@ -98,6 +99,24 @@ function referenceIdentityKey(reference: ReferenceIdentity) {
   const year = reference.year ?? "";
   const firstAuthor = normaliseText(reference.authors?.[0]);
   return `meta:${title}|${year}|${firstAuthor}`;
+}
+
+function stronglyMatchesReference(left: ReferenceIdentity, right: ReferenceIdentity) {
+  const leftDoi = normaliseDoi(left.doi);
+  const rightDoi = normaliseDoi(right.doi);
+  if (leftDoi && rightDoi && leftDoi === rightDoi) return true;
+
+  const leftTitle = normaliseText(left.title);
+  const rightTitle = normaliseText(right.title);
+  const leftYear = left.year ?? "";
+  const rightYear = right.year ?? "";
+  const leftAuthor = normaliseText(left.authors?.[0]);
+  const rightAuthor = normaliseText(right.authors?.[0]);
+  const sameMetadata = Boolean(leftTitle) && leftTitle === rightTitle &&
+    leftYear === rightYear && leftAuthor === rightAuthor;
+
+  // Conflicting non-empty DOIs require manual review even when metadata matches.
+  return sameMetadata && (!leftDoi || !rightDoi || leftDoi === rightDoi);
 }
 
 export default function ReferencesCitationsEditor({ projectId }: { projectId: string }) {
@@ -235,8 +254,11 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     const linkedCitations = workspace.in_text_citations.filter((citation) =>
       (citation.reference_ids || []).includes(reference.reference_id),
     );
+    const singleReferenceMappings = linkedCitations.filter(
+      (citation) => (citation.reference_ids || []).filter((id) => id !== reference.reference_id).length === 0,
+    ).length;
     const warning = linkedCitations.length
-      ? ` This reference is linked to ${linkedCitations.length} citation mapping(s). Deleting it will also permanently delete those mapped citations and their saved manuscript text, including any mapping that also links to other references.`
+      ? ` ${linkedCitations.length} citation mapping(s) use this reference. Multi-reference mappings will be preserved with this reference removed; ${singleReferenceMappings} mapping(s) that cite only this reference will be removed.`
       : "";
 
     const confirmed = window.confirm(
@@ -244,13 +266,16 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     );
     if (!confirmed) return;
 
-    const linkedCitationIds = new Set(linkedCitations.map((citation) => citation.citation_id));
+    const nextCitations = workspace.in_text_citations
+      .map((citation) => ({
+        ...citation,
+        reference_ids: (citation.reference_ids || []).filter((id) => id !== reference.reference_id),
+      }))
+      .filter((citation) => citation.reference_ids.length > 0);
     const nextWorkspace: Workspace = {
       ...workspace,
       references: workspace.references.filter((item) => item.reference_id !== reference.reference_id),
-      in_text_citations: workspace.in_text_citations.filter(
-        (citation) => !linkedCitationIds.has(citation.citation_id),
-      ),
+      in_text_citations: nextCitations,
     };
 
     const saved = await saveWorkspace(nextWorkspace);
@@ -262,7 +287,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
       setSelectedReferenceIds((current) => current.filter((id) => id !== reference.reference_id));
       setMessage(
         linkedCitations.length
-          ? `Reference deleted along with ${linkedCitations.length} linked citation mapping(s).`
+          ? `Reference deleted. Preserved ${linkedCitations.length - singleReferenceMappings} multi-reference citation mapping(s); removed ${singleReferenceMappings} mapping(s) with no remaining references.`
           : "Reference deleted.",
       );
     }
@@ -274,6 +299,9 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     const authors = form.authors.split(/\n|;/).map((part) => part.trim()).filter(Boolean);
     const nextReference: ReferenceRecord = {
       reference_id: editingReferenceId || crypto.randomUUID(),
+      source_id: editingReferenceId
+        ? workspace.references.find((reference) => reference.reference_id === editingReferenceId)?.source_id ?? null
+        : null,
       authors,
       year: form.year.trim() ? Number(form.year) : null,
       title: form.title.trim(),
@@ -315,12 +343,17 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     setMessage("");
     try {
       const literature = await getLiteratureWorkspace(projectId);
-      const existingKeys = new Set(workspace.references.map(referenceIdentityKey).filter(Boolean));
-      const additions: ReferenceRecord[] = [];
-      let skippedDuplicates = 0;
+      const nextReferences = [...workspace.references];
+      let additions = 0;
+      let linksCreated = 0;
+      let alreadyLinked = 0;
+      let ambiguousMatches = 0;
+      let doiConflicts = 0;
+
       for (const source of literature.sources) {
         const candidate: ReferenceRecord = {
           reference_id: source.source_id,
+          source_id: source.source_id,
           authors: source.authors || [],
           year: source.year ?? null,
           title: source.title,
@@ -335,21 +368,58 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
           abstract: source.abstract ?? null,
           keywords: source.keywords || [],
         };
-        const key = referenceIdentityKey(candidate);
-        if (!key || existingKeys.has(key)) {
-          skippedDuplicates += 1;
+
+        const strongMatches = nextReferences.filter((reference) =>
+          stronglyMatchesReference(reference, candidate),
+        );
+
+        if (strongMatches.length === 1) {
+          const match = strongMatches[0];
+          if (match.source_id && match.source_id !== source.source_id) {
+            ambiguousMatches += 1;
+          } else if (match.source_id === source.source_id) {
+            alreadyLinked += 1;
+          } else {
+            const index = nextReferences.findIndex((reference) => reference.reference_id === match.reference_id);
+            nextReferences[index] = { ...match, source_id: source.source_id };
+            linksCreated += 1;
+          }
           continue;
         }
-        existingKeys.add(key);
-        additions.push(candidate);
+
+        if (strongMatches.length > 1) {
+          ambiguousMatches += 1;
+          continue;
+        }
+
+        const sameTitleYear = nextReferences.some((reference) =>
+          normaliseText(reference.title) === normaliseText(candidate.title) &&
+          (reference.year ?? "") === (candidate.year ?? ""),
+        );
+        const sourceDoi = normaliseDoi(candidate.doi);
+        const conflictingDoi = sameTitleYear && Boolean(sourceDoi) && nextReferences.some((reference) =>
+          normaliseText(reference.title) === normaliseText(candidate.title) &&
+          (reference.year ?? "") === (candidate.year ?? "") &&
+          Boolean(normaliseDoi(reference.doi)) &&
+          normaliseDoi(reference.doi) !== sourceDoi,
+        );
+        if (sameTitleYear) {
+          if (conflictingDoi) {
+            doiConflicts += 1;
+          } else {
+            ambiguousMatches += 1;
+          }
+          continue;
+        }
+
+        nextReferences.push(candidate);
+        additions += 1;
       }
-      const next = { ...workspace, references: [...workspace.references, ...additions] };
-      const saved = await saveWorkspace(next);
+
+      const saved = await saveWorkspace({ ...workspace, references: nextReferences });
       if (saved) {
         setMessage(
-          additions.length
-            ? `Imported ${additions.length} literature source(s); skipped ${skippedDuplicates} duplicate or unidentifiable source(s).`
-            : `No new literature sources imported; skipped ${skippedDuplicates} duplicate or unidentifiable source(s).`,
+          `Imported ${additions} new reference(s), linked ${linksCreated} existing record(s), ${alreadyLinked} already linked; ${ambiguousMatches} ambiguous match(es) and ${doiConflicts} DOI conflict(s) need manual review.`,
         );
       }
     } catch (err) {
@@ -467,6 +537,7 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
               <strong>{reference.title}</strong>
               <p>{reference.authors.join("; ")}{reference.year ? ` (${reference.year})` : ""}</p>
               <p className="muted">{[reference.journal_or_book, reference.volume ? `Vol. ${reference.volume}` : "", reference.issue ? `Issue ${reference.issue}` : "", reference.pages ? `pp. ${reference.pages}` : ""].filter(Boolean).join(", ")}</p>
+              <p className="muted">Literature source ID: {reference.source_id || "Not explicitly linked; run the integrity check to review matches"}</p>
               {reference.doi && <p><a href={reference.doi.startsWith("http") ? reference.doi : `https://doi.org/${reference.doi.replace(/^doi:\s*/i, "")}`} target="_blank" rel="noreferrer">DOI: {reference.doi}</a></p>}
               {reference.url && <p><a href={reference.url} target="_blank" rel="noreferrer">Open source</a></p>}
               <div className="form-row">
@@ -511,8 +582,48 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
         <div className="pagehead"><div><div className="eyebrow">Quality control</div><h3>Citation integrity</h3><p className="muted">Check for duplicate records, citations without references, and references that have not been cited.</p></div><button className="button" type="button" onClick={runIntegrityCheck} disabled={busy}>{busy ? "Checking..." : "Run integrity check"}</button></div>
         {integrity && <div className="notice">
           <strong>Status: {String(integrity.status || "checked")}</strong>
-          <p>References: {String(integrity.reference_count ?? 0)} · Citation mappings: {String(integrity.citation_count ?? 0)}</p>
-          <p>Uncited references: {Array.isArray(integrity.uncited_references) ? integrity.uncited_references.length : 0} · Duplicate records: {Array.isArray(integrity.duplicate_references) ? integrity.duplicate_references.length : 0} · Unresolved citation links: {Array.isArray(integrity.orphan_citations) ? integrity.orphan_citations.length : 0}</p>
+          <p>References: {String(integrity.reference_count ?? 0)} · Citation mappings: {String(integrity.citation_count ?? 0)} · Literature sources: {String(integrity.literature_source_count ?? 0)}</p>
+          <p>Uncited references: {Array.isArray(integrity.uncited_references) ? integrity.uncited_references.length : 0} · Duplicate references: {Array.isArray(integrity.duplicate_references) ? integrity.duplicate_references.length : 0} · Possible reference matches: {Array.isArray(integrity.possible_duplicate_groups) ? integrity.possible_duplicate_groups.length : 0}</p>
+          <p>Duplicate literature sources: {Array.isArray(integrity.duplicate_literature_sources) ? integrity.duplicate_literature_sources.length : 0} · Possible source matches: {Array.isArray(integrity.possible_duplicate_literature_sources) ? integrity.possible_duplicate_literature_sources.length : 0}</p>
+          <p>Cross-module identity matches: {Array.isArray(integrity.cross_module_matches) ? integrity.cross_module_matches.length : 0} · References without source link: {Array.isArray(integrity.references_without_literature_source_link) ? integrity.references_without_literature_source_link.length : 0} · Sources without reference link: {Array.isArray(integrity.literature_sources_without_reference_link) ? integrity.literature_sources_without_reference_link.length : 0}</p>
+          <p>Unresolved citation links: {Array.isArray(integrity.orphan_citations) ? integrity.orphan_citations.length : 0}</p>
+          {Array.isArray(integrity.cross_module_matches) && integrity.cross_module_matches.length > 0 && (
+            <div>
+              <strong>Source-to-reference match review</strong>
+              <ul>
+                {integrity.cross_module_matches.slice(0, 30).map((match, index) => (
+                  <li key={String(match.reference_id) + "-" + String(match.source_id) + "-" + index}>
+                    {String(match.reference_title || "Untitled reference")} ↔ {String(match.source_title || "Untitled source")} — {String(match.match_type)}
+                  </li>
+                ))}
+              </ul>
+              {integrity.cross_module_matches.length > 30 && <p className="muted">Showing the first 30 matches.</p>}
+            </div>
+          )}
+          {Array.isArray(integrity.possible_duplicate_groups) && integrity.possible_duplicate_groups.length > 0 && (
+            <div>
+              <strong>Reference groups needing manual review</strong>
+              <ul>
+                {integrity.possible_duplicate_groups.slice(0, 20).map((group, index) => (
+                  <li key={String(group.title) + "-" + index}>
+                    {String(group.title || "Untitled work")} ({String(group.year ?? "year unknown")}) — {String(group.reason || "Review metadata")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {Array.isArray(integrity.possible_duplicate_literature_sources) && integrity.possible_duplicate_literature_sources.length > 0 && (
+            <div>
+              <strong>Literature source groups needing manual review</strong>
+              <ul>
+                {integrity.possible_duplicate_literature_sources.slice(0, 20).map((group, index) => (
+                  <li key={String(group.title) + "-" + index}>
+                    {String(group.title || "Untitled work")} ({String(group.year ?? "year unknown")}) — {String(group.reason || "Review metadata")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>}
       </section>
     </div>
