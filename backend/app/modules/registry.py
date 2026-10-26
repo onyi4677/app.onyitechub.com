@@ -17,7 +17,6 @@ MODULES: dict[str, dict[str, Any]] = {
         "status": "active",
     },
     "methodology": {"name": "Research Design & Methodology", "description": "Review protocol, PCC framework, eligibility criteria, and analysis plan.", "status": "active"},
-    "study_screening": {"name": "Study Screening Log", "description": "Protocol-linked title/abstract and full-text screening decisions, retrieval attempts, and selection counts.", "status": "active"},
     "instruments": {"name": "Instruments & Data Collection", "description": "Validated instruments, questionnaire structure, consent and data collection plan.", "status": "planned"},
     "data": {"name": "Data Workspace", "description": "Raw data intake, validation, cleaning, metadata and dataset versions.", "status": "planned"},
     "analysis": {"name": "Statistical Analysis", "description": "Descriptive and inferential analysis with reproducible analysis specifications.", "status": "planned"},
@@ -25,6 +24,7 @@ MODULES: dict[str, dict[str, Any]] = {
     "manuscript": {"name": "Manuscript", "description": "Results, discussion, conclusion, recommendations and manuscript assembly.", "status": "planned"},
     "integrity": {"name": "Research Integrity & Quality", "description": "Consistency, citations, methodology checks, transparency and integrity controls.", "status": "planned"},
     "journal": {"name": "Journal Preparation", "description": "Journal requirements, formatting, DOCX/PDF export and publication metadata.", "status": "planned"},
+    "study_screening": {"name": "Study Screening Log", "description": "Protocol-linked title/abstract and full-text screening decisions, retrieval attempts, and selection counts.", "status": "active"},
 }
 
 
