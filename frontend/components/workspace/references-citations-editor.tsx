@@ -7,6 +7,7 @@ import { getLiteratureWorkspace } from "../../lib/api/literature";
 
 type ReferenceRecord = {
   reference_id: string;
+  source_id?: string | null;
   authors: string[];
   year: number | null;
   title: string;
@@ -98,6 +99,24 @@ function referenceIdentityKey(reference: ReferenceIdentity) {
   const year = reference.year ?? "";
   const firstAuthor = normaliseText(reference.authors?.[0]);
   return `meta:${title}|${year}|${firstAuthor}`;
+}
+
+function stronglyMatchesReference(left: ReferenceIdentity, right: ReferenceIdentity) {
+  const leftDoi = normaliseDoi(left.doi);
+  const rightDoi = normaliseDoi(right.doi);
+  if (leftDoi && rightDoi && leftDoi === rightDoi) return true;
+
+  const leftTitle = normaliseText(left.title);
+  const rightTitle = normaliseText(right.title);
+  const leftYear = left.year ?? "";
+  const rightYear = right.year ?? "";
+  const leftAuthor = normaliseText(left.authors?.[0]);
+  const rightAuthor = normaliseText(right.authors?.[0]);
+  const sameMetadata = Boolean(leftTitle) && leftTitle === rightTitle &&
+    leftYear === rightYear && leftAuthor === rightAuthor;
+
+  // Conflicting non-empty DOIs require manual review even when metadata matches.
+  return sameMetadata && (!leftDoi || !rightDoi || leftDoi === rightDoi);
 }
 
 export default function ReferencesCitationsEditor({ projectId }: { projectId: string }) {
@@ -274,6 +293,9 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     const authors = form.authors.split(/\n|;/).map((part) => part.trim()).filter(Boolean);
     const nextReference: ReferenceRecord = {
       reference_id: editingReferenceId || crypto.randomUUID(),
+      source_id: editingReferenceId
+        ? workspace.references.find((reference) => reference.reference_id === editingReferenceId)?.source_id ?? null
+        : null,
       authors,
       year: form.year.trim() ? Number(form.year) : null,
       title: form.title.trim(),
@@ -315,12 +337,17 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     setMessage("");
     try {
       const literature = await getLiteratureWorkspace(projectId);
-      const existingKeys = new Set(workspace.references.map(referenceIdentityKey).filter(Boolean));
-      const additions: ReferenceRecord[] = [];
-      let skippedDuplicates = 0;
+      const nextReferences = [...workspace.references];
+      let additions = 0;
+      let linksCreated = 0;
+      let alreadyLinked = 0;
+      let ambiguousMatches = 0;
+      let doiConflicts = 0;
+
       for (const source of literature.sources) {
         const candidate: ReferenceRecord = {
           reference_id: source.source_id,
+          source_id: source.source_id,
           authors: source.authors || [],
           year: source.year ?? null,
           title: source.title,
@@ -335,21 +362,54 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
           abstract: source.abstract ?? null,
           keywords: source.keywords || [],
         };
-        const key = referenceIdentityKey(candidate);
-        if (!key || existingKeys.has(key)) {
-          skippedDuplicates += 1;
+
+        const strongMatches = nextReferences.filter((reference) =>
+          stronglyMatchesReference(reference, candidate),
+        );
+
+        if (strongMatches.length === 1) {
+          const match = strongMatches[0];
+          if (match.source_id && match.source_id !== source.source_id) {
+            ambiguousMatches += 1;
+          } else if (match.source_id === source.source_id || match.reference_id === source.source_id) {
+            alreadyLinked += 1;
+          } else {
+            const index = nextReferences.findIndex((reference) => reference.reference_id === match.reference_id);
+            nextReferences[index] = { ...match, source_id: source.source_id };
+            linksCreated += 1;
+          }
           continue;
         }
-        existingKeys.add(key);
-        additions.push(candidate);
+
+        if (strongMatches.length > 1) {
+          ambiguousMatches += 1;
+          continue;
+        }
+
+        const sameTitleYear = nextReferences.some((reference) =>
+          normaliseText(reference.title) === normaliseText(candidate.title) &&
+          (reference.year ?? "") === (candidate.year ?? ""),
+        );
+        const sourceDoi = normaliseDoi(candidate.doi);
+        const conflictingDoi = sameTitleYear && Boolean(sourceDoi) && nextReferences.some((reference) =>
+          normaliseText(reference.title) === normaliseText(candidate.title) &&
+          (reference.year ?? "") === (candidate.year ?? "") &&
+          Boolean(normaliseDoi(reference.doi)) &&
+          normaliseDoi(reference.doi) !== sourceDoi,
+        );
+        if (conflictingDoi) {
+          doiConflicts += 1;
+          continue;
+        }
+
+        nextReferences.push(candidate);
+        additions += 1;
       }
-      const next = { ...workspace, references: [...workspace.references, ...additions] };
-      const saved = await saveWorkspace(next);
+
+      const saved = await saveWorkspace({ ...workspace, references: nextReferences });
       if (saved) {
         setMessage(
-          additions.length
-            ? `Imported ${additions.length} literature source(s); skipped ${skippedDuplicates} duplicate or unidentifiable source(s).`
-            : `No new literature sources imported; skipped ${skippedDuplicates} duplicate or unidentifiable source(s).`,
+          `Imported ${additions} new reference(s), linked ${linksCreated} existing record(s), ${alreadyLinked} already linked; ${ambiguousMatches} ambiguous match(es) and ${doiConflicts} DOI conflict(s) need manual review.`,
         );
       }
     } catch (err) {
