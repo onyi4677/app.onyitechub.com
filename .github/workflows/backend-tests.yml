@@ -4,12 +4,14 @@ on:
   push:
     branches:
       - feature/study-screening-architecture
+      - fix/methodology-screening-data-integrity
     paths:
       - "backend/**"
       - ".github/workflows/backend-tests.yml"
   pull_request:
     branches:
       - main
+      - feature/study-screening-architecture
     paths:
       - "backend/**"
       - ".github/workflows/backend-tests.yml"
