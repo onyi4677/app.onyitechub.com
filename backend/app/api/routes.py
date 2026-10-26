@@ -381,8 +381,9 @@ def update_project_module(
             detail="Unknown research module",
         )
 
-    if module_key == "study_screening":
-        records = payload.content.get("records", [])
+    screening_content = payload.content.get("study_screening") if module_key == "methodology" else (payload.content if module_key == "study_screening" else None)
+    if screening_content is not None:
+        records = screening_content.get("records", [])
         if not isinstance(records, list):
             raise HTTPException(status_code=422, detail="Screening records must be a list")
 
@@ -440,10 +441,20 @@ def update_project_module(
                     detail="Records marked not retrieved require documented retrieval attempts",
                 )
 
+    content_to_save = payload.content
+    if module_key == "methodology":
+        # Methodology fields and screening are one persisted module. Merge partial
+        # screening saves into the current record so they cannot erase protocol fields,
+        # and methodology saves cannot erase screening decisions.
+        existing = _project_module_or_empty(project_id, "methodology")
+        content_to_save = {**existing, **payload.content}
+        if "study_screening" not in payload.content and "study_screening" in existing:
+            content_to_save["study_screening"] = existing["study_screening"]
+
     content = save_module(
         project_id,
         module_key,
-        payload.content,
+        content_to_save,
     )
 
     return {
