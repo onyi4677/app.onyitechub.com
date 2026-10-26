@@ -25,6 +25,7 @@ app.add_middleware(
         "https://app-onyitechub-3f1jipt6s-onyitechub.vercel.app",
         "https://app-onyitechub-k2adn6n2a-onyitechub.vercel.app",
         "https://app-onyitechub-6acf3n567-onyitechub.vercel.app",
+        "https://app-onyitechub-3vxwlzaut-onyitechub.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
