@@ -79,15 +79,16 @@ class StudyScreeningApiTests(unittest.TestCase):
     def update(self, records):
         return update_project_module(
             "project-1",
-            "methodology",
-            ModuleUpdateRequest(content={"study_screening": {"records": records, "protocol_version": "1"}}),
+            "study_screening",
+            ModuleUpdateRequest(content={"records": records, "protocol_version": "1"}),
         )
 
     def test_valid_record_saves_and_resolves_reference_alias_to_literature_id(self):
         response = self.update([record(source_id="ref-1")])
 
         self.assertEqual(response["status"], "saved")
-        saved_records = self.save_module.call_args.args[2]["study_screening"]["records"]
+        self.assertEqual(self.save_module.call_args.args[1], "study_screening")
+        saved_records = self.save_module.call_args.args[2]["records"]
         self.assertEqual(saved_records[0]["source_id"], "lit-1")
         self.save_module.assert_called_once()
 
@@ -142,28 +143,31 @@ class StudyScreeningApiTests(unittest.TestCase):
         self.save_module.assert_not_called()
 
 
-    def test_screening_save_preserves_existing_methodology_fields(self):
-        self.project["modules"]["methodology"] = {
+    def test_empty_screening_save_uses_separate_module_and_preserves_methodology(self):
+        methodology = {
             "review_question": "Existing review question",
+            "pcc_context": "North-East Nigeria",
             "eligibility_criteria": "Approved eligibility criteria",
         }
+        self.project["modules"]["methodology"] = methodology
 
-        self.update([record()])
+        response = self.update([])
 
-        saved = self.save_module.call_args.args[2]
-        self.assertEqual(saved["review_question"], "Existing review question")
-        self.assertEqual(saved["eligibility_criteria"], "Approved eligibility criteria")
-        self.assertEqual(len(saved["study_screening"]["records"]), 1)
+        self.assertEqual(response["status"], "saved")
+        self.assertEqual(self.save_module.call_args.args[1], "study_screening")
+        self.assertEqual(self.save_module.call_args.args[2]["records"], [])
+        self.assertEqual(self.project["modules"]["methodology"], methodology)
 
-    def test_methodology_save_preserves_existing_screening_log(self):
+    def test_methodology_partial_save_does_not_write_screening_module(self):
         existing_screening = {
             "records": [record()],
             "protocol_version": "1",
         }
         self.project["modules"]["methodology"] = {
             "review_question": "Old question",
-            "study_screening": existing_screening,
+            "eligibility_criteria": "Existing criteria",
         }
+        self.project["modules"]["study_screening"] = existing_screening
 
         update_project_module(
             "project-1",
@@ -171,9 +175,11 @@ class StudyScreeningApiTests(unittest.TestCase):
             ModuleUpdateRequest(content={"review_question": "Updated question"}),
         )
 
+        self.assertEqual(self.save_module.call_args.args[1], "methodology")
         saved = self.save_module.call_args.args[2]
         self.assertEqual(saved["review_question"], "Updated question")
-        self.assertEqual(saved["study_screening"], existing_screening)
+        self.assertEqual(saved["eligibility_criteria"], "Existing criteria")
+        self.assertEqual(self.project["modules"]["study_screening"], existing_screening)
 
 
 if __name__ == "__main__":
