@@ -39,10 +39,10 @@ export default function ManuscriptProductionEditor({ projectId }: { projectId: s
 
   useEffect(() => {
     let active = true;
-    Promise.all([getProjectModule(projectId, "study_screening"), getProjectModule(projectId, "manuscript")])
-      .then(([screening, manuscript]) => {
+    Promise.all([getProjectModule(projectId, "methodology"), getProjectModule(projectId, "manuscript")])
+      .then(([methodology, manuscript]) => {
         if (!active) return;
-        const raw = screening.content || {};
+        const raw = methodology.content?.study_screening && typeof methodology.content.study_screening === "object" ? methodology.content.study_screening as Record<string, unknown> : {};
         setRecords(Array.isArray(raw.records) ? raw.records as ScreeningRecord[] : []);
         const manuscriptData = manuscript.content || {};
         setSavedDraft(typeof manuscriptData.study_selection_narrative === "string" ? manuscriptData.study_selection_narrative : "");
