@@ -17,7 +17,7 @@ from app.modules.research_foundation import get_research_foundation_spec
 from app.modules.registry import get_modules
 from app.services.analysis import analyze_idea
 from app.services.project_modules import get_module, save_module
-from app.services.reference_identity import duplicate_report
+from app.services.reference_identity import duplicate_report, metadata_key, normalise_doi
 
 
 router = APIRouter(prefix="/api")
@@ -583,6 +583,8 @@ def citation_integrity(
 
     references = module.get("references", [])
     citations = module.get("in_text_citations", [])
+    literature_module = _project_module_or_empty(project_id, "literature_evidence")
+    sources = literature_module.get("sources", [])
 
     reference_ids = {
         reference.get("reference_id")
@@ -614,19 +616,73 @@ def citation_integrity(
     duplicate_results = duplicate_report(references, "reference_id")
     duplicates = duplicate_results["duplicate_records"]
     possible_duplicate_groups = duplicate_results["possible_duplicate_groups"]
+    source_duplicate_results = duplicate_report(sources, "source_id")
+
+    # Report cross-module identity matches without silently merging records.
+    cross_module_matches = []
+    linked_reference_ids = set()
+    linked_source_ids = set()
+    for reference in references:
+        for source in sources:
+            reference_id = str(reference.get("reference_id") or "")
+            source_id = str(source.get("source_id") or "")
+            reference_doi = normalise_doi(reference.get("doi"))
+            source_doi = normalise_doi(source.get("doi"))
+            same_metadata = bool(metadata_key(reference)) and metadata_key(reference) == metadata_key(source)
+            explicitly_linked = bool(source_id) and (
+                reference.get("source_id") == source_id or reference_id == source_id
+            )
+
+            if explicitly_linked:
+                match_type = "linked"
+                linked_reference_ids.add(reference_id)
+                linked_source_ids.add(source_id)
+            elif reference_doi and source_doi and reference_doi == source_doi:
+                match_type = "doi_match_needs_link"
+            elif same_metadata and (not reference_doi or not source_doi or reference_doi == source_doi):
+                match_type = "metadata_match_needs_link"
+            elif same_metadata and reference_doi and source_doi and reference_doi != source_doi:
+                match_type = "metadata_match_doi_conflict"
+            else:
+                continue
+
+            cross_module_matches.append({
+                "reference_id": reference.get("reference_id"),
+                "reference_title": reference.get("title"),
+                "source_id": source.get("source_id"),
+                "source_title": source.get("title"),
+                "match_type": match_type,
+            })
 
     report = {
         "status": (
             "pass"
-            if not orphan_citations and not duplicates and not possible_duplicate_groups
+            if not orphan_citations
+            and not duplicates
+            and not possible_duplicate_groups
+            and not source_duplicate_results["duplicate_records"]
+            and not source_duplicate_results["possible_duplicate_groups"]
+            and all(match["match_type"] == "linked" for match in cross_module_matches)
             else "review_required"
         ),
         "citation_count": len(citations),
         "reference_count": len(references),
+        "literature_source_count": len(sources),
         "orphan_citations": orphan_citations,
         "uncited_references": uncited_references,
         "duplicate_references": duplicates,
         "possible_duplicate_groups": possible_duplicate_groups,
+        "duplicate_literature_sources": source_duplicate_results["duplicate_records"],
+        "possible_duplicate_literature_sources": source_duplicate_results["possible_duplicate_groups"],
+        "cross_module_matches": cross_module_matches,
+        "references_without_literature_source_link": [
+            reference.get("reference_id") for reference in references
+            if reference.get("reference_id") not in linked_reference_ids
+        ],
+        "literature_sources_without_reference_link": [
+            source.get("source_id") for source in sources
+            if source.get("source_id") not in linked_source_ids
+        ],
         "style": module.get("citation_style", "APA 7"),
     }
 
