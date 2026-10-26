@@ -45,12 +45,12 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
 
   useEffect(() => {
     let active = true;
-    Promise.all([getProjectResearchSources(projectId), getProjectModule(projectId, "methodology")])
-      .then(([registry, method]) => {
+    Promise.all([getProjectResearchSources(projectId), getProjectModule(projectId, "methodology"), getProjectModule(projectId, "study_screening")])
+      .then(([registry, method, screening]) => {
         if (!active) return;
         setSources(registry.sources || []);
         setMethodology(method.content || {});
-        const raw = (method.content?.study_screening && typeof method.content.study_screening === "object" ? method.content.study_screening : {}) as Record<string, unknown>;
+        const raw = (screening.content && typeof screening.content === "object" ? screening.content : {}) as Record<string, unknown>;
         setData({ records: Array.isArray(raw.records) ? raw.records.map(normalize).filter((r): r is RecordItem => Boolean(r)) : [],
           protocol_version: typeof raw.protocol_version === "string" ? raw.protocol_version : "1",
           updated_at: typeof raw.updated_at === "string" ? raw.updated_at : undefined });
@@ -115,7 +115,7 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
     }
     const savedAt = stamp(); setSaving(true); setError(""); setMessage("");
     try {
-      await saveProjectModule(projectId, "methodology", { study_screening: { ...data, updated_at: savedAt } });
+      await saveProjectModule(projectId, "study_screening", { ...data, updated_at: savedAt });
       setData((current) => ({ ...current, updated_at: savedAt }));
       setMessage("Screening log saved. Counts are calculated from current decisions.");
     } catch (err) { setError(err instanceof Error ? err.message : "Screening log could not be saved."); }
