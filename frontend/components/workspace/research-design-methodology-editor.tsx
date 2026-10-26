@@ -183,7 +183,7 @@ export default function ResearchDesignMethodologyEditor({
         <StudyScreeningEditor projectId={projectId} />
       </section>
 
-      {error && <div className="notice">{error}</div>
+      {error && <div className="notice">{error}</div>}
       {message && <div className="notice">{message}</div>}
       <div className="editor-actions">
         <button className="button" type="button" disabled={saving} onClick={() => save("in_progress")}>{saving ? "Saving..." : "Save methodology"}</button>
