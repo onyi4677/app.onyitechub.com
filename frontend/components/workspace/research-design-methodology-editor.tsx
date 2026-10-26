@@ -88,11 +88,12 @@ export default function ResearchDesignMethodologyEditor({
 
   useEffect(() => {
     let active = true;
-    Promise.all([getProjectModule(projectId, moduleKey), getProjectModule(projectId, "study_screening")])
-      .then(([result, screening]) => {
+    getProjectModule(projectId, moduleKey)
+      .then((result) => {
         if (!active) return;
         setForm(normalize(result.content || {}));
-        const records = Array.isArray(screening.content?.records) ? screening.content.records as Record<string, unknown>[] : [];
+        const screeningData = result.content?.study_screening && typeof result.content.study_screening === "object" ? result.content.study_screening as Record<string, unknown> : {};
+        const records = Array.isArray(screeningData.records) ? screeningData.records as Record<string, unknown>[] : [];
         setScreeningCounts({
           records: records.length,
           screened: records.filter((r) => r.title_abstract_decision !== "not_screened").length,
@@ -178,7 +179,7 @@ export default function ResearchDesignMethodologyEditor({
       <section className="card editor-section">
         <div className="eyebrow">Integrated screening workspace</div>
         <h3>Screen studies in two stages</h3>
-        <p className="muted">Use title/abstract screening first, then record the full-text eligibility decision. Screening records are saved to the shared Study Screening module, and the progress summary above reads from those same records. You do not need to re-enter results in the methodology text.</p>
+        <p className="muted">Use title/abstract screening first, then record the full-text eligibility decision. Screening records are saved within this Research Design & Methodology record, and the progress summary above reads from those same records. You do not need to re-enter results in the methodology text.</p>
         <StudyScreeningEditor projectId={projectId} />
       </section>
 
