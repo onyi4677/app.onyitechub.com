@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { getProjectModule, saveProjectModule } from "../../lib/api";
-import StudyScreeningEditor from "./study-screening-editor";
 
 type MethodologyForm = {
   review_design: string;
@@ -178,13 +177,6 @@ export default function ResearchDesignMethodologyEditor({
           <p className="muted">{field.hint}</p>
         </div>
       ))}
-
-      <section className="card editor-section">
-        <div className="eyebrow">Integrated screening workspace</div>
-        <h3>Screen studies in two stages</h3>
-        <p className="muted">Use title/abstract screening first, then record the full-text eligibility decision. Screening records are saved separately from the Research Design & Methodology protocol, and the progress summary above reads from the Study Screening module. You do not need to re-enter results in the methodology text.</p>
-        <StudyScreeningEditor projectId={projectId} />
-      </section>
 
       {error && <div className="notice">{error}</div>}
       {message && <div className="notice">{message}</div>}
