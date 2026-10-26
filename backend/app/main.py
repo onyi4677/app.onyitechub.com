@@ -18,7 +18,7 @@ app.add_middleware(
         "https://app-onyitechub-358h7j9c1-onyitechub.vercel.app",
         "https://app-onyitechub-m3au06wu5-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feature-prevent-litera-fa3c62-onyitechub.vercel.app",
-        "https://app-onyitechub-com-git-feature-study-screenin-98b495-onyitechub.vercel.app",
+        "https://app-onyitechub-com-git-feat-study-screening-c-21b625-onyitechub.vercel.app",
         "https://app-onyitechub-l25wvbrhz-onyitechub.vercel.app",
         "https://app-onyitechub-ihgt60tmp-onyitechub.vercel.app",
         "https://app-onyitechub-ko42m4rd5-onyitechub.vercel.app",
