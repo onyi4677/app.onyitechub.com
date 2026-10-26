@@ -397,8 +397,12 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
           Boolean(normaliseDoi(reference.doi)) &&
           normaliseDoi(reference.doi) !== sourceDoi,
         );
-        if (conflictingDoi) {
-          doiConflicts += 1;
+        if (sameTitleYear) {
+          if (conflictingDoi) {
+            doiConflicts += 1;
+          } else {
+            ambiguousMatches += 1;
+          }
           continue;
         }
 
