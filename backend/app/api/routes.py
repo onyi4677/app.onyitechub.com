@@ -381,7 +381,9 @@ def update_project_module(
             detail="Unknown research module",
         )
 
-    screening_content = payload.content.get("study_screening") if module_key == "methodology" else (payload.content if module_key == "study_screening" else None)
+    # Screening is persisted as its own module. Never interpret a methodology
+    # payload as screening data, even if an old client sends an empty nested object.
+    screening_content = payload.content if module_key == "study_screening" else None
     if screening_content is not None:
         if not isinstance(screening_content, dict):
             raise HTTPException(status_code=422, detail="Screening data must be an object")
@@ -445,13 +447,10 @@ def update_project_module(
 
     content_to_save = payload.content
     if module_key == "methodology":
-        # Methodology fields and screening are one persisted module. Merge partial
-        # screening saves into the current record so they cannot erase protocol fields,
-        # and methodology saves cannot erase screening decisions.
+        # Methodology saves may be partial, so merge only within methodology.
+        # Screening uses a separate module key and cannot replace this content.
         existing = _project_module_or_empty(project_id, "methodology")
         content_to_save = {**existing, **payload.content}
-        if "study_screening" not in payload.content and "study_screening" in existing:
-            content_to_save["study_screening"] = existing["study_screening"]
 
     content = save_module(
         project_id,
