@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getProjectModule, saveProjectModule } from "../../lib/api";
+import StudyScreeningEditor from "./study-screening-editor";
 
 type MethodologyForm = {
   review_design: string;
@@ -83,12 +84,24 @@ export default function ResearchDesignMethodologyEditor({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [screeningCounts, setScreeningCounts] = useState<{ records: number; screened: number; excluded: number; assessed: number; included: number; unresolved: number } | null>(null);
 
   useEffect(() => {
     let active = true;
     getProjectModule(projectId, moduleKey)
       .then((result) => {
-        if (active) setForm(normalize(result.content || {}));
+        if (!active) return;
+        setForm(normalize(result.content || {}));
+        const screeningData = result.content?.study_screening && typeof result.content.study_screening === "object" ? result.content.study_screening as Record<string, unknown> : {};
+        const records = Array.isArray(screeningData.records) ? screeningData.records as Record<string, unknown>[] : [];
+        setScreeningCounts({
+          records: records.length,
+          screened: records.filter((r) => r.title_abstract_decision !== "not_screened").length,
+          excluded: records.filter((r) => r.title_abstract_decision === "exclude").length,
+          assessed: records.filter((r) => r.full_text_decision === "include" || r.full_text_decision === "exclude").length,
+          included: records.filter((r) => r.full_text_decision === "include").length,
+          unresolved: records.filter((r) => r.title_abstract_decision === "not_screened" || r.title_abstract_decision === "maybe" || (r.title_abstract_decision !== "exclude" && r.full_text_decision === "not_assessed")).length,
+        });
       })
       .catch((err) => {
         if (active) setError(err instanceof Error ? err.message : "Could not load the methodology module.");
@@ -130,6 +143,23 @@ export default function ResearchDesignMethodologyEditor({
         <p className="muted">Geographical scope: Adamawa, Bauchi, Borno, Gombe, Taraba, and Yobe States. Provisional publication window: 1 January 2020 to the final search date. Language: English.</p>
       </div>
 
+      <div className="card editor-section">
+        <div className="eyebrow">Linked screening outputs</div>
+        <h3>Study-selection progress</h3>
+        {screeningCounts && screeningCounts.records > 0 ? (
+          <>
+            <div className="statrow">
+              <div className="stat"><span className="muted">Records in screening log</span><strong>{screeningCounts.records}</strong></div>
+              <div className="stat"><span className="muted">Title/abstract screened</span><strong>{screeningCounts.screened}</strong></div>
+              <div className="stat"><span className="muted">Full-text assessed</span><strong>{screeningCounts.assessed}</strong></div>
+              <div className="stat"><span className="muted">Included reports</span><strong>{screeningCounts.included}</strong></div>
+              <div className="stat"><span className="muted">Unresolved</span><strong>{screeningCounts.unresolved}</strong></div>
+            </div>
+            <p className="muted">These values are read from Study Screening, not manually re-entered. Treat the selection totals as provisional until unresolved records and search provenance are addressed.</p>
+          </>
+        ) : <p className="muted">No screening records are linked yet. Add source records and record screening decisions in the Study Screening module; the counts will appear here automatically.</p>}
+      </div>
+
       {fields.map((field) => (
         <div className="card editor-section" key={field.key}>
           <div className="eyebrow">{field.label}</div>
@@ -145,6 +175,13 @@ export default function ResearchDesignMethodologyEditor({
           <p className="muted">{field.hint}</p>
         </div>
       ))}
+
+      <section className="card editor-section">
+        <div className="eyebrow">Integrated screening workspace</div>
+        <h3>Screen studies in two stages</h3>
+        <p className="muted">Use title/abstract screening first, then record the full-text eligibility decision. Screening records are saved within this Research Design & Methodology record, and the progress summary above reads from those same records. You do not need to re-enter results in the methodology text.</p>
+        <StudyScreeningEditor projectId={projectId} />
+      </section>
 
       {error && <div className="notice">{error}</div>}
       {message && <div className="notice">{message}</div>}
