@@ -13,15 +13,15 @@ from typing import Any, Iterable
 
 def normalise_doi(value: Any) -> str:
     doi = str(value or "").strip().lower()
-    doi = re.sub(r"^https?://(?:dx\\.)?doi\\.org/", "", doi)
-    doi = re.sub(r"^doi:\\s*", "", doi)
+    doi = re.sub(r"^https?://(?:dx\.)?doi\.org/", "", doi)
+    doi = re.sub(r"^doi:\s*", "", doi)
     return doi.rstrip().rstrip(".,; ")
 
 
 def normalise_text(value: Any) -> str:
     text = unicodedata.normalize("NFKC", str(value or "")).lower()
     text = text.replace("’", "'").replace("‘", "'")
-    return " ".join(re.findall(r"[^\\W_]+", text, flags=re.UNICODE))
+    return " ".join(re.findall(r"[^\W_]+", text, flags=re.UNICODE))
 
 
 def _authors(record: dict[str, Any]) -> list[str]:
