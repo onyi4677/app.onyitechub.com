@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from fastapi import HTTPException
 
-from app.api.routes import ModuleUpdateRequest, update_project_module
+from app.api.routes import ModuleUpdateRequest, get_project_module, update_project_module
 
 
 def project_with_sources():
@@ -157,6 +157,25 @@ class StudyScreeningApiTests(unittest.TestCase):
         self.assertEqual(self.save_module.call_args.args[1], "study_screening")
         self.assertEqual(self.save_module.call_args.args[2]["records"], [])
         self.assertEqual(self.project["modules"]["methodology"], methodology)
+
+    def test_legacy_nested_screening_is_read_when_standalone_log_is_empty(self):
+        legacy_screening = {
+            "records": [record()],
+            "protocol_version": "1",
+        }
+        self.project["modules"]["methodology"] = {
+            "review_question": "Existing question",
+            "study_screening": legacy_screening,
+        }
+        self.project["modules"]["study_screening"] = {
+            "records": [],
+            "protocol_version": "1",
+        }
+
+        response = get_project_module("project-1", "study_screening")
+
+        self.assertEqual(response["content"]["records"], legacy_screening["records"])
+        self.assertEqual(response["content"]["protocol_version"], "1")
 
     def test_methodology_partial_save_does_not_write_screening_module(self):
         existing_screening = {
