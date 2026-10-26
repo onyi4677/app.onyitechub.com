@@ -1,7 +1,7 @@
-"""Shared identity helpers for deduplicating bibliographic records safely.
+"""Shared identity helpers for safe bibliographic duplicate review.
 
-The helpers identify likely duplicate records; they do not merge or delete records.
-Callers must preserve canonical IDs and review ambiguous matches before merging.
+These helpers identify exact duplicates and weaker candidates. They never merge
+or delete records; ambiguous matches must be reviewed by a researcher.
 """
 from __future__ import annotations
 
@@ -13,36 +13,36 @@ from typing import Any, Iterable
 
 def normalise_doi(value: Any) -> str:
     doi = str(value or "").strip().lower()
-    doi = re.sub(r"^https?://(?:dx\.)?doi\.org/", "", doi)
-    doi = re.sub(r"^doi:\s*", "", doi)
+    doi = re.sub(r"^https?://(?:dx\\.)?doi\\.org/", "", doi)
+    doi = re.sub(r"^doi:\\s*", "", doi)
     return doi.rstrip().rstrip(".,; ")
 
 
 def normalise_text(value: Any) -> str:
     text = unicodedata.normalize("NFKC", str(value or "")).lower()
     text = text.replace("’", "'").replace("‘", "'")
-    return " ".join(re.findall(r"[^\W_]+", text, flags=re.UNICODE))
+    return " ".join(re.findall(r"[^\\W_]+", text, flags=re.UNICODE))
 
 
-def _first_author(record: dict[str, Any]) -> str:
+def _authors(record: dict[str, Any]) -> list[str]:
     authors = record.get("authors") or []
     if isinstance(authors, str):
         authors = [authors]
-    first = next((str(author).strip() for author in authors if str(author).strip()), "")
-    return normalise_text(first)
+    return [normalise_text(author) for author in authors if str(author).strip()]
 
 
 def metadata_key(record: dict[str, Any]) -> str:
     title = normalise_text(record.get("title"))
     if not title:
         return ""
+    authors = _authors(record)
     year = record.get("year")
-    author = _first_author(record)
-    return f"meta:{title}|{year if year is not None else ''}|{author}"
+    first_author = authors[0] if authors else ""
+    return f"meta:{title}|{year if year is not None else ''}|{first_author}"
 
 
 def identity_keys(record: dict[str, Any]) -> set[str]:
-    """Return independent DOI and metadata keys, not a single precedence key."""
+    """Return DOI and metadata keys for matching across module boundaries."""
     keys: set[str] = set()
     doi = normalise_doi(record.get("doi"))
     if doi:
@@ -53,26 +53,21 @@ def identity_keys(record: dict[str, Any]) -> set[str]:
     return keys
 
 
+def _title_year_key(record: dict[str, Any]) -> str:
+    title = normalise_text(record.get("title"))
+    if not title:
+        return ""
+    year = record.get("year")
+    return f"title-year:{title}|{year if year is not None else ''}"
+
+
 def duplicate_report(records: Iterable[dict[str, Any]], id_field: str) -> dict[str, Any]:
-    """Return exact identity matches and weaker title/year review candidates."""
-    records = list(records)
-    exact_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    title_year_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
-
-    for record in records:
-        for key in identity_keys(record):
-            exact_groups[key].append(record)
-        title = normalise_text(record.get("title"))
-        if title:
-            year = record.get("year")
-            title_year_groups[f"title-year:{title}|{year if year is not None else ''}"].append(record)
-
-    # A record can participate in more than one key group (e.g. DOI and metadata).
-    # Union matching records into stable groups so they are not double-counted.
-    parent: dict[str, str] = {}
+    """Return exact duplicates and ambiguous title/year groups for manual review."""
+    records = [record for record in records if record.get(id_field)]
+    parent = {str(record[id_field]): str(record[id_field]) for record in records}
+    by_id = {str(record[id_field]): record for record in records}
 
     def find(item_id: str) -> str:
-        parent.setdefault(item_id, item_id)
         while parent[item_id] != item_id:
             parent[item_id] = parent[parent[item_id]]
             item_id = parent[item_id]
@@ -83,55 +78,82 @@ def duplicate_report(records: Iterable[dict[str, Any]], id_field: str) -> dict[s
         if a != b:
             parent[b] = a
 
-    by_id = {str(record.get(id_field)): record for record in records if record.get(id_field)}
-    for group in exact_groups.values():
-        ids = [str(record.get(id_field)) for record in group if record.get(id_field)]
-        for item_id in ids[1:]:
-            union(ids[0], item_id)
+    exact_pairs: set[tuple[str, str, str]] = set()
+    for i, left in enumerate(records):
+        left_id = str(left[id_field])
+        left_doi = normalise_doi(left.get("doi"))
+        left_meta = metadata_key(left)
+        for right in records[i + 1:]:
+            right_id = str(right[id_field])
+            right_doi = normalise_doi(right.get("doi"))
+            right_meta = metadata_key(right)
+            match_type = ""
 
-    merged: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for item_id, record in by_id.items():
-        root = find(item_id)
-        merged[root].append(record)
+            if left_doi and right_doi and left_doi == right_doi:
+                match_type = "doi"
+            elif left_meta and right_meta and left_meta == right_meta and (
+                not left_doi or not right_doi or left_doi == right_doi
+            ):
+                match_type = "metadata"
+
+            if match_type:
+                union(left_id, right_id)
+                exact_pairs.add((left_id, right_id, match_type))
+
+    components: dict[str, list[str]] = defaultdict(list)
+    for item_id in by_id:
+        components[find(item_id)].append(item_id)
 
     duplicates = []
-    for group in merged.values():
-        if len(group) < 2:
+    for ids in components.values():
+        if len(ids) < 2:
             continue
-        # Prefer the earliest stored record as the review anchor; no record is
-        # automatically selected for deletion or merge.
-        anchor = group[0]
-        for record in group[1:]:
+        anchor_id = ids[0]
+        anchor = by_id[anchor_id]
+        for item_id in ids[1:]:
+            record = by_id[item_id]
+            match_type = "doi" if (
+                normalise_doi(anchor.get("doi"))
+                and normalise_doi(anchor.get("doi")) == normalise_doi(record.get("doi"))
+            ) else "metadata"
             duplicates.append({
-                id_field: record.get(id_field),
-                "duplicate_of": anchor.get(id_field),
-                "match_type": (
-                    "doi"
-                    if normalise_doi(record.get("doi"))
-                    and normalise_doi(record.get("doi")) == normalise_doi(anchor.get("doi"))
-                    else "metadata"
-                ),
+                id_field: item_id,
+                "duplicate_of": anchor_id,
+                "match_type": match_type,
             })
 
+    title_year_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        key = _title_year_key(record)
+        if key:
+            title_year_groups[key].append(record)
+
     possible_groups = []
+    exact_id_pairs = {
+        frozenset((left_id, right_id))
+        for left_id, right_id, _ in exact_pairs
+    }
     for group in title_year_groups.values():
-        unique = {str(record.get(id_field)): record for record in group if record.get(id_field)}
-        if len(unique) < 2:
+        if len(group) < 2:
             continue
-        values = list(unique.values())
-        doi_values = {normalise_doi(record.get("doi")) for record in values if normalise_doi(record.get("doi"))}
-        # If exact DOI/metadata already identifies the group, it is reported above.
-        if all(any(
-            str(record.get(id_field)) == str(duplicate.get(id_field))
-            for duplicate in duplicates
-        ) for record in values[1:]):
+        ids = [str(record[id_field]) for record in group]
+        ambiguous_pair_exists = any(
+            frozenset((ids[i], ids[j])) not in exact_id_pairs
+            for i in range(len(ids))
+            for j in range(i + 1, len(ids))
+        )
+        if not ambiguous_pair_exists:
             continue
         possible_groups.append({
-            "title": values[0].get("title"),
-            "year": values[0].get("year"),
-            "reference_ids": [record.get(id_field) for record in values],
-            "doi_values": sorted(doi_values),
-            "reason": "Same normalized title and year; author or DOI metadata differs. Review manually.",
+            "title": group[0].get("title"),
+            "year": group[0].get("year"),
+            "reference_ids": ids,
+            "doi_values": sorted({
+                normalise_doi(record.get("doi"))
+                for record in group
+                if normalise_doi(record.get("doi"))
+            }),
+            "reason": "Same normalized title and year but identity metadata differs or DOIs conflict. Review manually.",
         })
 
     return {
