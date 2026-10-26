@@ -142,5 +142,39 @@ class StudyScreeningApiTests(unittest.TestCase):
         self.save_module.assert_not_called()
 
 
+    def test_screening_save_preserves_existing_methodology_fields(self):
+        self.project["modules"]["methodology"] = {
+            "review_question": "Existing review question",
+            "eligibility_criteria": "Approved eligibility criteria",
+        }
+
+        self.update([record()])
+
+        saved = self.save_module.call_args.args[2]
+        self.assertEqual(saved["review_question"], "Existing review question")
+        self.assertEqual(saved["eligibility_criteria"], "Approved eligibility criteria")
+        self.assertEqual(len(saved["study_screening"]["records"]), 1)
+
+    def test_methodology_save_preserves_existing_screening_log(self):
+        existing_screening = {
+            "records": [record()],
+            "protocol_version": "1",
+        }
+        self.project["modules"]["methodology"] = {
+            "review_question": "Old question",
+            "study_screening": existing_screening,
+        }
+
+        update_project_module(
+            "project-1",
+            "methodology",
+            ModuleUpdateRequest(content={"review_question": "Updated question"}),
+        )
+
+        saved = self.save_module.call_args.args[2]
+        self.assertEqual(saved["review_question"], "Updated question")
+        self.assertEqual(saved["study_screening"], existing_screening)
+
+
 if __name__ == "__main__":
     unittest.main()
