@@ -383,6 +383,8 @@ def update_project_module(
 
     screening_content = payload.content.get("study_screening") if module_key == "methodology" else (payload.content if module_key == "study_screening" else None)
     if screening_content is not None:
+        if not isinstance(screening_content, dict):
+            raise HTTPException(status_code=422, detail="Screening data must be an object")
         records = screening_content.get("records", [])
         if not isinstance(records, list):
             raise HTTPException(status_code=422, detail="Screening records must be a list")
