@@ -69,6 +69,21 @@ def get_module(
     modules = project.get("modules") or {}
     module = modules.get(module_key)
 
+    # Backward compatibility: older versions stored screening inside methodology.
+    # Prefer a populated standalone screening module, but do not hide legacy records
+    # behind an empty placeholder created by a newer version.
+    if module_key == "study_screening":
+        standalone_records = module.get("records") if isinstance(module, dict) else None
+        legacy_methodology = modules.get("methodology") or {}
+        legacy_screening = legacy_methodology.get("study_screening") if isinstance(legacy_methodology, dict) else None
+        legacy_records = legacy_screening.get("records") if isinstance(legacy_screening, dict) else None
+        if (
+            (not isinstance(standalone_records, list) or not standalone_records)
+            and isinstance(legacy_records, list)
+            and legacy_records
+        ):
+            return legacy_screening
+
     # A valid project may not have saved content for this module yet.
     # Return an empty object so the frontend can open a blank workspace.
     if module is None:
