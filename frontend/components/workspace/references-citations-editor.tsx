@@ -379,6 +379,26 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
     setSelectedReferenceIds([]);
   }
 
+  async function deleteCitation(citation: CitationRecord) {
+    if (saving) return;
+    const confirmed = window.confirm(
+      `Delete the citation mapping "${citation.citation_form}"? This removes only this mapping and will not delete its reference records.`,
+    );
+    if (!confirmed) return;
+
+    const nextWorkspace: Workspace = {
+      ...workspace,
+      in_text_citations: workspace.in_text_citations.filter(
+        (item) => item.citation_id !== citation.citation_id,
+      ),
+    };
+    const saved = await saveWorkspace(nextWorkspace);
+    if (saved) {
+      setIntegrity(null);
+      setMessage("Citation mapping deleted. Reference records were kept.");
+    }
+  }
+
   async function runIntegrityCheck() {
     setBusy(true);
     setError("");
@@ -503,6 +523,17 @@ export default function ReferencesCitationsEditor({ projectId }: { projectId: st
             <p>{citation.text}</p>
             <p className="muted">{citation.location || "No section specified"}{citation.page ? ` · p. ${citation.page}` : ""}</p>
             <p className="muted">{citation.reference_ids.map((id) => workspace.references.find((ref) => ref.reference_id === id)?.title || "Reference not found").join("; ")}</p>
+            <div className="form-row">
+              <button
+                className="button"
+                type="button"
+                disabled={saving}
+                onClick={() => deleteCitation(citation)}
+                aria-label={`Delete citation mapping ${citation.citation_form}`}
+              >
+                Delete mapping
+              </button>
+            </div>
           </article>
         ))}
       </section>
