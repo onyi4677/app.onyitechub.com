@@ -22,9 +22,8 @@ MODULES: dict[str, dict[str, Any]] = {
     "analysis": {"name": "Statistical Analysis", "description": "Descriptive and inferential analysis with reproducible analysis specifications.", "status": "planned"},
     "prediction": {"name": "Machine Learning & Prediction", "description": "Prediction only when justified by genuine data and an appropriate research question.", "status": "planned"},
     "manuscript": {"name": "Manuscript", "description": "Results, discussion, conclusion, recommendations and manuscript assembly.", "status": "planned"},
-    "integrity": {"name": "Research Integrity & Quality", "description": "Consistency, citations, methodology checks, transparency and integrity controls.", "status": "planned"},
+    "study_screening": {"name": "Study Screening Log", "description": "Protocol-linked title/abstract and full-text screening decisions, retrieval attempts, and selection counts. This reuses the previously unused Research Integrity & Quality module slot; screening records remain stored under the separate study_screening data key.", "status": "active"},
     "journal": {"name": "Journal Preparation", "description": "Journal requirements, formatting, DOCX/PDF export and publication metadata.", "status": "planned"},
-    "study_screening": {"name": "Study Screening Log", "description": "Protocol-linked title/abstract and full-text screening decisions, retrieval attempts, and selection counts.", "status": "active"},
 }
 
 
