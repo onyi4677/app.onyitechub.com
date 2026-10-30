@@ -4,6 +4,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 from app.api.routes import ModuleUpdateRequest, get_project_module, update_project_module
+from app.modules.registry import get_modules
 
 
 def project_with_sources():
@@ -89,6 +90,14 @@ class StudyScreeningApiTests(unittest.TestCase):
             "study_screening",
             ModuleUpdateRequest(content=content),
         )
+
+    def test_registry_contains_twelve_modules_and_keeps_integrity_separate(self):
+        modules = get_modules()
+
+        self.assertEqual(len(modules), 12)
+        self.assertIn("integrity", modules)
+        self.assertIn("study_screening", modules)
+        self.assertEqual(modules["study_screening"]["status"], "active")
 
     def test_systematic_review_type_is_accepted(self):
         response = self.update_with_content({
