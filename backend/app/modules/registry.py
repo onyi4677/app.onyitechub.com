@@ -23,8 +23,8 @@ MODULES: dict[str, dict[str, Any]] = {
     "prediction": {"name": "Machine Learning & Prediction", "description": "Prediction only when justified by genuine data and an appropriate research question.", "status": "planned"},
     "manuscript": {"name": "Manuscript", "description": "Results, discussion, conclusion, recommendations and manuscript assembly.", "status": "planned"},
     "integrity": {"name": "Research Integrity & Quality", "description": "Consistency, citations, methodology checks, transparency and integrity controls.", "status": "planned"},
-    "study_screening": {"name": "Study Screening", "description": "Protocol-linked screening for scoping and systematic reviews, including title/abstract decisions, full-text eligibility, retrieval attempts and calculated flow counts.", "status": "active"},
     "journal": {"name": "Journal Preparation", "description": "Journal requirements, formatting, DOCX/PDF export and publication metadata.", "status": "planned"},
+    "study_screening": {"name": "Study Screening", "description": "Protocol-linked screening for scoping and systematic reviews, including title/abstract decisions, full-text eligibility, retrieval attempts and calculated flow counts.", "status": "active"},
 }
 
 
