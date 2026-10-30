@@ -12,6 +12,7 @@ import {
   type LiteratureSourceInput,
   type EvidenceItem,
 } from "../../lib/api/literature";
+import { getProjectResearchSources, type CanonicalResearchSource } from "../../lib/api/modules";
 
 function normaliseDoi(value?: string | null) {
   return (value || "")
@@ -90,6 +91,7 @@ export default function LiteratureEvidenceEditor({
   projectId: string;
 }) {
   const [sources, setSources] = useState<LiteratureSource[]>([]);
+  const [registrySources, setRegistrySources] = useState<CanonicalResearchSource[]>([]);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [claims, setClaims] = useState<LiteratureClaim[]>([]);
   const [synthesis, setSynthesis] = useState("");
@@ -109,8 +111,39 @@ export default function LiteratureEvidenceEditor({
   async function load() {
     try {
       const w = await getLiteratureWorkspace(projectId);
-
       setSources(w.sources);
+      try {
+        const registry = await getProjectResearchSources(projectId);
+        setRegistrySources(registry.sources);
+      } catch {
+        // Keep existing Literature & Evidence usable while an older Lambda is
+        // being replaced. The canonical registry is an enhancement, not the
+        // source of truth for the saved literature workspace.
+        setRegistrySources(w.sources.map((item) => ({
+          source_id: item.source_id,
+          canonical_source_id: item.source_id,
+          aliases: [item.source_id],
+          literature_source_ids: [item.source_id],
+          reference_ids: [],
+          authors: item.authors || [],
+          year: item.year ?? null,
+          title: item.title,
+          source_type: item.source_type,
+          journal_or_publisher: item.journal_or_publisher,
+          journal_or_book: item.journal_or_publisher,
+          volume: item.volume,
+          issue: item.issue,
+          pages: item.pages,
+          publisher: null,
+          doi: item.doi,
+          url: item.url,
+          abstract: item.abstract,
+          keywords: item.keywords || [],
+          verified: Boolean(item.verified),
+          identity_key: `literature:${item.source_id}`,
+        })));
+        setMessage("Saved literature loaded. Shared source linking will be available after the backend update completes.");
+      }
       setEvidence(w.evidence_items);
       setClaims(w.claims);
       setSynthesis(w.synthesis);
@@ -721,10 +754,9 @@ export default function LiteratureEvidenceEditor({
           >
             <option value="">Select a source</option>
 
-            {sources.map((s) => (
-              <option key={s.source_id} value={s.source_id}>
-                {s.authors.join(", ")} ({s.year ?? "n.d."}) —{" "}
-                {s.title}
+            {registrySources.map((s) => (
+              <option key={s.canonical_source_id} value={s.canonical_source_id}>
+                {s.authors.join(", ")} ({s.year ?? "n.d."}) — {s.title}{s.reference_ids.length && s.literature_source_ids.length ? " · linked across modules" : s.reference_ids.length ? " · reference library" : ""}
               </option>
             ))}
           </select>
@@ -846,8 +878,8 @@ export default function LiteratureEvidenceEditor({
           <div className="evidence-list">
             <h3>Saved evidence items</h3>
             {evidence.map((item, index) => {
-              const linkedSource = sources.find(
-                (s) => s.source_id === item.source_id
+              const linkedSource = registrySources.find(
+                (s) => s.canonical_source_id === item.source_id || s.aliases.includes(item.source_id)
               );
               return (
                 <div className="notice" key={item.evidence_id}>
@@ -930,8 +962,8 @@ export default function LiteratureEvidenceEditor({
               })
             }
           >
-            {sources.map((s) => (
-              <option key={s.source_id} value={s.source_id}>
+            {registrySources.map((s) => (
+              <option key={s.canonical_source_id} value={s.canonical_source_id}>
                 {s.authors.join(", ")} ({s.year ?? "n.d."}) — {s.title}
               </option>
             ))}
@@ -987,8 +1019,8 @@ export default function LiteratureEvidenceEditor({
           <div className="evidence-list">
             <h3>Saved evidence-backed claims</h3>
             {claims.map((item, index) => {
-              const linkedSources = sources.filter((s) =>
-                (item.source_ids ?? []).includes(s.source_id)
+              const linkedSources = registrySources.filter((s) =>
+                (item.source_ids ?? []).some((id) => s.canonical_source_id === id || s.aliases.includes(id))
               );
               const linkedEvidence = evidence.filter((evItem) =>
                 (item.evidence_ids ?? []).includes(evItem.evidence_id)
