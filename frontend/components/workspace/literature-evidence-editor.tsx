@@ -110,10 +110,40 @@ export default function LiteratureEvidenceEditor({
 
   async function load() {
     try {
-      const [w, registry] = await Promise.all([getLiteratureWorkspace(projectId), getProjectResearchSources(projectId)]);
-
+      const w = await getLiteratureWorkspace(projectId);
       setSources(w.sources);
-      setRegistrySources(registry.sources);
+      try {
+        const registry = await getProjectResearchSources(projectId);
+        setRegistrySources(registry.sources);
+      } catch {
+        // Keep existing Literature & Evidence usable while an older Lambda is
+        // being replaced. The canonical registry is an enhancement, not the
+        // source of truth for the saved literature workspace.
+        setRegistrySources(w.sources.map((item) => ({
+          source_id: item.source_id,
+          canonical_source_id: item.source_id,
+          aliases: [item.source_id],
+          literature_source_ids: [item.source_id],
+          reference_ids: [],
+          authors: item.authors || [],
+          year: item.year ?? null,
+          title: item.title,
+          source_type: item.source_type,
+          journal_or_publisher: item.journal_or_publisher,
+          journal_or_book: item.journal_or_publisher,
+          volume: item.volume,
+          issue: item.issue,
+          pages: item.pages,
+          publisher: null,
+          doi: item.doi,
+          url: item.url,
+          abstract: item.abstract,
+          keywords: item.keywords || [],
+          verified: Boolean(item.verified),
+          identity_key: `literature:${item.source_id}`,
+        })));
+        setMessage("Saved literature loaded. Shared source linking will be available after the backend update completes.");
+      }
       setEvidence(w.evidence_items);
       setClaims(w.claims);
       setSynthesis(w.synthesis);

@@ -87,23 +87,29 @@ export default function ResearchDesignMethodologyEditor({
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      getProjectModule(projectId, moduleKey),
-      getProjectModule(projectId, "study_screening"),
-    ])
-      .then(([result, screeningResult]) => {
+    getProjectModule(projectId, moduleKey)
+      .then((result) => {
         if (!active) return;
         setForm(normalize(result.content || {}));
-        const screeningData = screeningResult.content && typeof screeningResult.content === "object" ? screeningResult.content as Record<string, unknown> : {};
-        const records = Array.isArray(screeningData.records) ? screeningData.records as Record<string, unknown>[] : [];
-        setScreeningCounts({
-          records: records.length,
-          screened: records.filter((r) => r.title_abstract_decision !== "not_screened").length,
-          excluded: records.filter((r) => r.title_abstract_decision === "exclude").length,
-          assessed: records.filter((r) => r.full_text_decision === "include" || r.full_text_decision === "exclude").length,
-          included: records.filter((r) => r.full_text_decision === "include").length,
-          unresolved: records.filter((r) => r.title_abstract_decision === "not_screened" || r.title_abstract_decision === "maybe" || (r.title_abstract_decision !== "exclude" && r.full_text_decision === "not_assessed")).length,
-        });
+        // Screening is an optional linked output. Do not let an older backend
+        // without /study_screening hide an existing methodology record.
+        getProjectModule(projectId, "study_screening")
+          .then((screeningResult) => {
+            if (!active) return;
+            const screeningData = screeningResult.content && typeof screeningResult.content === "object" ? screeningResult.content as Record<string, unknown> : {};
+            const records = Array.isArray(screeningData.records) ? screeningData.records as Record<string, unknown>[] : [];
+            setScreeningCounts({
+              records: records.length,
+              screened: records.filter((r) => r.title_abstract_decision !== "not_screened").length,
+              excluded: records.filter((r) => r.title_abstract_decision === "exclude").length,
+              assessed: records.filter((r) => r.full_text_decision === "include" || r.full_text_decision === "exclude").length,
+              included: records.filter((r) => r.full_text_decision === "include").length,
+              unresolved: records.filter((r) => r.title_abstract_decision === "not_screened" || r.title_abstract_decision === "maybe" || (r.title_abstract_decision !== "exclude" && r.full_text_decision === "not_assessed")).length,
+            });
+          })
+          .catch(() => {
+            if (active) setScreeningCounts(null);
+          });
       })
       .catch((err) => {
         if (active) setError(err instanceof Error ? err.message : "Could not load the methodology module.");
