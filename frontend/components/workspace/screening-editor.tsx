@@ -224,6 +224,8 @@ export default function ScreeningEditor({ projectId }: { projectId: string }) {
         <div className="editor-actions">
           {(["include","exclude","uncertain"] as Decision[]).map((decision)=><button key={decision} className="button" type="button" onClick={()=>decide(record.record_id,"title_abstract",decision)}>{decision==="include"?"Include":decision==="exclude"?"Exclude":"Uncertain"}</button>)}
           <span className="badge">Title/abstract consensus: {record.title_abstract_decision}</span>
+        {(record.reviewer_decisions || []).filter((item)=>item.stage==="title_abstract").length > 1 && <div className="notice">Reviewer decisions: {(record.reviewer_decisions || []).filter((item)=>item.stage==="title_abstract").map((item)=>item.reviewer+": "+item.decision).join(" · ")}</div>}
+        {record.title_abstract_decision === "uncertain" && <><label>Adjudication rationale<input value={reasonDraft[record.record_id+":title_abstract:adjudication"] || ""} onChange={(e)=>setReasonDraft({...reasonDraft,[record.record_id+":title_abstract:adjudication"]:e.target.value})}/></label><div className="editor-actions">{(["include","exclude"] as const).map((decision)=><button className="button" key={decision} type="button" onClick={()=>adjudicate(record.record_id,"title_abstract",decision)}>Adjudicate: {decision}</button>)}</div></div>}
         </div>
         {record.title_abstract_decision === "include" && <>
           <label>Full-text URL<input value={record.full_text_url || ""} onChange={(e)=>patchRecord(record.record_id,{full_text_url:e.target.value})}/></label>
@@ -232,6 +234,8 @@ export default function ScreeningEditor({ projectId }: { projectId: string }) {
           <div className="editor-actions">
             {(["include","exclude","uncertain"] as Decision[]).map((decision)=><button key={decision} className="button" type="button" onClick={()=>decide(record.record_id,"full_text",decision)}>{decision==="include"?"Include study":decision==="exclude"?"Exclude at full text":"Defer"}</button>)}
             <span className="badge">Full-text consensus: {record.full_text_decision || "pending"}</span>
+          {(record.reviewer_decisions || []).filter((item)=>item.stage==="full_text").length > 1 && <div className="notice">Reviewer decisions: {(record.reviewer_decisions || []).filter((item)=>item.stage==="full_text").map((item)=>item.reviewer+": "+item.decision).join(" · ")}</div>}
+          {record.full_text_decision === "uncertain" && <><label>Adjudication rationale<input value={reasonDraft[record.record_id+":full_text:adjudication"] || ""} onChange={(e)=>setReasonDraft({...reasonDraft,[record.record_id+":full_text:adjudication"]:e.target.value})}/></label><div className="editor-actions">{(["include","exclude"] as const).map((decision)=><button className="button" key={decision} type="button" onClick={()=>adjudicate(record.record_id,"full_text",decision)}>Adjudicate: {decision}</button>)}</div></div>}
           </div>
         </>}
         <label>Screening notes<textarea rows={2} value={record.notes || ""} onChange={(e)=>patchRecord(record.record_id,{notes:e.target.value})}/></label>
