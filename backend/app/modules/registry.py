@@ -16,6 +16,7 @@ MODULES: dict[str, dict[str, Any]] = {
         "description": "Reference library, in-text citation mapping, citation styles and reference integrity checks.",
         "status": "active",
     },
+    "screening": {"name": "Study Screening & PRISMA", "description": "Import records, deduplicate, screen titles/abstracts and full texts, resolve reviewer conflicts, and calculate transparent PRISMA flow counts for scoping and systematic reviews.", "status": "active"},
     "methodology": {"name": "Research Design & Methodology", "description": "Design, setting, population, sampling, sample size, ethics and analysis plan.", "status": "planned"},
     "instruments": {"name": "Instruments & Data Collection", "description": "Validated instruments, questionnaire structure, consent and data collection plan.", "status": "planned"},
     "data": {"name": "Data Workspace", "description": "Raw data intake, validation, cleaning, metadata and dataset versions.", "status": "planned"},
