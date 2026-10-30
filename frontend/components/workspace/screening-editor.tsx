@@ -52,6 +52,8 @@ export default function ScreeningEditor({ projectId }: { projectId: string }) {
   const [csv, setCsv] = useState("");
   const [newRecord, setNewRecord] = useState({ title: "", authors: "", year: "", doi: "", url: "", abstract: "", source_database: "" });
   const [reasonDraft, setReasonDraft] = useState<Record<string, string>>({});
+  const [reviewerName, setReviewerName] = useState("Reviewer 1");
+  const [adjudicatorName, setAdjudicatorName] = useState("Adjudicator");
 
   useEffect(() => {
     apiRequest<{content: Workspace}>(`/api/projects/${encodeURIComponent(projectId)}/modules/screening`)
@@ -98,7 +100,8 @@ export default function ScreeningEditor({ projectId }: { projectId: string }) {
       return { ...blankRecord(), title: get(row, ["title", "article title"]), authors: get(row, ["authors", "author"]).split(/[;|]/).map((x) => x.trim()).filter(Boolean), year: Number(get(row, ["year"])) || null, doi: get(row, ["doi"]), url: get(row, ["url", "link"]), abstract: get(row, ["abstract"]), source_database: get(row, ["database", "source", "source_database"]) };
     }).filter((r) => r.title.trim());
     if (!additions.length) { setError("No rows with a title were found. Check that your CSV has a title column."); return; }
-    update("records", [...data.records, ...additions]);
+    const flagged = additions.map((record) => { const duplicate = data.records.find((existing) => (record.doi && existing.doi?.toLowerCase() === record.doi.toLowerCase()) || existing.title.trim().toLowerCase() === record.title.trim().toLowerCase()); return duplicate ? { ...record, duplicate_status: "possible_duplicate", duplicate_of: duplicate.record_id } : record; });
+    update("records", [...data.records, ...flagged]);
     setCsv(""); setMessage(`Imported ${additions.length} record(s) into the workspace. Possible duplicates will be flagged when you save and review.`);
   }
 
@@ -113,10 +116,28 @@ export default function ScreeningEditor({ projectId }: { projectId: string }) {
   function decide(recordId: string, stage: "title_abstract" | "full_text", decision: Decision) {
     const reason = reasonDraft[`${recordId}:${stage}`] || "";
     if (decision === "exclude" && !reason.trim()) { setError("Record an exclusion reason before excluding a study."); return; }
-    const records = data.records.map((r) => r.record_id !== recordId ? r : stage === "title_abstract"
-      ? { ...r, title_abstract_decision: decision, title_abstract_reason: decision === "exclude" ? reason : "", reviewer_decisions: [...(r.reviewer_decisions || []), { reviewer: "primary reviewer", stage, decision, reason, decided_at: new Date().toISOString() }] }
-      : { ...r, full_text_decision: decision, full_text_exclusion_reason: decision === "exclude" ? reason : "", reviewer_decisions: [...(r.reviewer_decisions || []), { reviewer: "primary reviewer", stage, decision, reason, decided_at: new Date().toISOString() }] });
+    const records = data.records.map((r) => {
+      if (r.record_id !== recordId) return r;
+      const decisions = [...(r.reviewer_decisions || []), { reviewer: reviewerName.trim() || "Reviewer", stage, decision, reason, decided_at: new Date().toISOString() }];
+      const sameStage = decisions.filter((item) => item.stage === stage);
+      const distinct = [...new Set(sameStage.map((item) => item.decision))];
+      const consensus = distinct.length === 1 ? distinct[0] as Decision : "uncertain";
+      return stage === "title_abstract"
+        ? { ...r, reviewer_decisions: decisions, title_abstract_decision: consensus, title_abstract_reason: decision === "exclude" ? reason : r.title_abstract_reason }
+        : { ...r, reviewer_decisions: decisions, full_text_decision: consensus, full_text_exclusion_reason: decision === "exclude" ? reason : r.full_text_exclusion_reason };
+    });
     update("records", records); setError("");
+  }
+
+  function adjudicate(recordId: string, stage: "title_abstract" | "full_text", decision: "include" | "exclude") {
+    const reason = reasonDraft[`${recordId}:${stage}:adjudication`] || "";
+    if (!reason.trim()) { setError("Record the adjudication rationale before resolving a disagreement."); return; }
+    update("records", data.records.map((r) => {
+      if (r.record_id !== recordId) return r;
+      const adjudication = { reviewer: adjudicatorName.trim() || "Adjudicator", stage, decision, reason, decided_at: new Date().toISOString() };
+      return stage === "title_abstract" ? { ...r, title_abstract_decision: decision, adjudication } : { ...r, full_text_decision: decision, adjudication };
+    }));
+    setError("");
   }
 
   function patchRecord(recordId: string, patch: Partial<RecordItem>) {
@@ -142,6 +163,7 @@ export default function ScreeningEditor({ projectId }: { projectId: string }) {
       <label>Inclusion criteria<textarea rows={4} value={data.inclusion_criteria} onChange={(e) => update("inclusion_criteria", e.target.value)} /></label>
       <label>Exclusion criteria<textarea rows={4} value={data.exclusion_criteria} onChange={(e) => update("exclusion_criteria", e.target.value)} /></label>
       <label>Reviewers and roles<input value={data.reviewers} onChange={(e) => update("reviewers", e.target.value)} placeholder="Record reviewer names/roles and how disagreements will be resolved." /></label>
+      <div className="form-grid"><label>Current reviewer<input value={reviewerName} onChange={(e)=>setReviewerName(e.target.value)} /></label><label>Adjudicator<input value={adjudicatorName} onChange={(e)=>setAdjudicatorName(e.target.value)} /></label></div>
     </div>
 
     <div className="card editor-section">
@@ -201,7 +223,7 @@ export default function ScreeningEditor({ projectId }: { projectId: string }) {
         <label>Title / abstract exclusion reason (required to exclude)<input value={reasonDraft[record.record_id+":title_abstract"] || record.title_abstract_reason || ""} onChange={(e)=>setReasonDraft({...reasonDraft,[record.record_id+":title_abstract"]:e.target.value})}/></label>
         <div className="editor-actions">
           {(["include","exclude","uncertain"] as Decision[]).map((decision)=><button key={decision} className="button" type="button" onClick={()=>decide(record.record_id,"title_abstract",decision)}>{decision==="include"?"Include":decision==="exclude"?"Exclude":"Uncertain"}</button>)}
-          <span className="badge">Title/abstract: {record.title_abstract_decision}</span>
+          <span className="badge">Title/abstract consensus: {record.title_abstract_decision}</span>
         </div>
         {record.title_abstract_decision === "include" && <>
           <label>Full-text URL<input value={record.full_text_url || ""} onChange={(e)=>patchRecord(record.record_id,{full_text_url:e.target.value})}/></label>
@@ -209,7 +231,7 @@ export default function ScreeningEditor({ projectId }: { projectId: string }) {
           <label>Full-text exclusion reason (required to exclude)<input value={reasonDraft[record.record_id+":full_text"] || record.full_text_exclusion_reason || ""} onChange={(e)=>setReasonDraft({...reasonDraft,[record.record_id+":full_text"]:e.target.value})}/></label>
           <div className="editor-actions">
             {(["include","exclude","uncertain"] as Decision[]).map((decision)=><button key={decision} className="button" type="button" onClick={()=>decide(record.record_id,"full_text",decision)}>{decision==="include"?"Include study":decision==="exclude"?"Exclude at full text":"Defer"}</button>)}
-            <span className="badge">Full text: {record.full_text_decision || "pending"}</span>
+            <span className="badge">Full-text consensus: {record.full_text_decision || "pending"}</span>
           </div>
         </>}
         <label>Screening notes<textarea rows={2} value={record.notes || ""} onChange={(e)=>patchRecord(record.record_id,{notes:e.target.value})}/></label>
