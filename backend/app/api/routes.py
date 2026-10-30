@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.db import projects_table
 from app.modules.literature_evidence import get_literature_evidence_spec
 from app.modules.references_citations import get_references_citations_spec
+from app.modules.screening import get_screening_spec
 from app.modules.research_foundation import get_research_foundation_spec
 from app.modules.registry import get_modules
 from app.services.analysis import analyze_idea
@@ -94,6 +95,17 @@ class ReferenceRequest(BaseModel):
     keywords: list[str] = Field(default_factory=list)
 
 
+class ScreeningRecordRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=2000)
+    authors: list[str] = Field(default_factory=list)
+    year: int | None = None
+    doi: str | None = None
+    url: str | None = None
+    abstract: str | None = None
+    source_database: str | None = None
+    import_batch_id: str | None = None
+
+
 class CitationRequest(BaseModel):
     reference_ids: list[str] = Field(min_length=1)
     text: str = Field(min_length=1, max_length=2000)
@@ -157,6 +169,11 @@ def research_foundation_spec() -> dict[str, Any]:
 @router.get("/modules/literature-evidence/spec")
 def literature_evidence_spec() -> dict[str, Any]:
     return get_literature_evidence_spec()
+
+
+@router.get("/modules/screening/spec")
+def screening_spec() -> dict[str, Any]:
+    return get_screening_spec()
 
 
 @router.get("/modules/references-citations/spec")
@@ -256,6 +273,50 @@ def natlas_chat(payload: NatlasChatRequest) -> dict[str, Any]:
             detail="Invalid response from N-ATLaS",
         )
 
+
+# ---------------------------------------------------------------------
+# Study screening and review-flow records
+# ---------------------------------------------------------------------
+
+def _normalise_doi(value: str | None) -> str:
+    return (value or "").strip().lower().replace("https://doi.org/", "").replace("http://doi.org/", "").removeprefix("doi:")
+
+
+def _normalise_title(value: str) -> str:
+    return " ".join("".join(ch.lower() if ch.isalnum() else " " for ch in value).split())
+
+
+@router.post("/projects/{project_id}/screening/records")
+def add_screening_record(project_id: str, payload: ScreeningRecordRequest) -> dict[str, Any]:
+    module = _project_module_or_empty(project_id, "screening")
+    records = list(module.get("records") or [])
+    doi = _normalise_doi(payload.doi)
+    title = _normalise_title(payload.title)
+    duplicate_candidates = [item for item in records if (doi and _normalise_doi(item.get("doi")) == doi) or (title and _normalise_title(item.get("title", "")) == title)]
+    from datetime import datetime, timezone
+    item = {"record_id": str(uuid4()), **payload.model_dump(), "duplicate_status": "possible_duplicate" if duplicate_candidates else "unique_unreviewed", "duplicate_of": duplicate_candidates[0].get("record_id") if duplicate_candidates else None, "title_abstract_decision": "pending", "full_text_status": "not_assessed", "reviewer_decisions": [], "adjudication": None, "created_at": datetime.now(timezone.utc).isoformat()}
+    records.append(item)
+    module["records"] = records
+    save_module(project_id, "screening", module)
+    return {"status": "created", "record": item, "duplicate_candidates": duplicate_candidates}
+
+
+@router.put("/projects/{project_id}/screening")
+def save_screening_workspace(project_id: str, payload: ModuleUpdateRequest) -> dict[str, Any]:
+    content = dict(payload.content)
+    review_type = content.get("review_type", "scoping")
+    if review_type not in {"scoping", "systematic"}:
+        raise HTTPException(status_code=422, detail="Review type must be scoping or systematic")
+    for record in content.get("records", []):
+        decision = record.get("title_abstract_decision", "pending")
+        if decision not in {"pending", "include", "exclude", "uncertain"}:
+            raise HTTPException(status_code=422, detail="Invalid title/abstract decision")
+        if decision == "exclude" and not str(record.get("title_abstract_reason") or "").strip():
+            raise HTTPException(status_code=422, detail="Every exclusion requires a reason")
+        if record.get("full_text_decision") == "exclude" and not str(record.get("full_text_exclusion_reason") or "").strip():
+            raise HTTPException(status_code=422, detail="Every full-text exclusion requires a reason")
+    saved = save_module(project_id, "screening", content)
+    return {"status": "saved", "content": saved}
 
 # ---------------------------------------------------------------------
 # Research projects
