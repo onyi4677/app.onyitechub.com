@@ -27,7 +27,7 @@ export default function Dashboard() {
 
       <div className="statrow">
         <div className="card stat"><span className="muted">Projects</span><strong>{projects.length}</strong></div>
-        <div className="card stat"><span className="muted">Research modules</span><strong>11</strong></div>
+        <div className="card stat"><span className="muted">Research modules</span><strong>12</strong></div>
         <div className="card stat"><span className="muted">Workspace</span><strong>Research-ready</strong></div>
       </div>
 
