@@ -119,8 +119,9 @@ export default function ScreeningEditor({ projectId }: { projectId: string }) {
     const records = data.records.map((r) => {
       if (r.record_id !== recordId) return r;
       const decisions = [...(r.reviewer_decisions || []), { reviewer: reviewerName.trim() || "Reviewer", stage, decision, reason, decided_at: new Date().toISOString() }];
-      const sameStage = decisions.filter((item) => item.stage === stage);
-      const distinct = [...new Set(sameStage.map((item) => item.decision))];
+      const latestByReviewer = new Map<string, typeof decisions[number]>();
+      decisions.filter((item) => item.stage === stage).forEach((item) => latestByReviewer.set(item.reviewer, item));
+      const distinct = [...new Set([...latestByReviewer.values()].map((item) => item.decision))];
       const consensus = distinct.length === 1 ? distinct[0] as Decision : "uncertain";
       return stage === "title_abstract"
         ? { ...r, reviewer_decisions: decisions, title_abstract_decision: consensus, title_abstract_reason: decision === "exclude" ? reason : r.title_abstract_reason }
