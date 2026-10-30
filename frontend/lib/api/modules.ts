@@ -17,3 +17,33 @@ export async function saveProjectModule(id: string, moduleKey: string, content: 
     { method: "PUT", body: JSON.stringify({ content }) }
   );
 }
+
+export type CanonicalResearchSource = {
+  source_id: string;
+  canonical_source_id: string;
+  aliases: string[];
+  literature_source_ids: string[];
+  reference_ids: string[];
+  authors: string[];
+  year: number | null;
+  title: string;
+  source_type: string;
+  journal_or_publisher?: string | null;
+  journal_or_book?: string | null;
+  volume?: string | null;
+  issue?: string | null;
+  pages?: string | null;
+  publisher?: string | null;
+  doi?: string | null;
+  url?: string | null;
+  abstract?: string | null;
+  keywords: string[];
+  verified: boolean;
+  identity_key: string;
+};
+
+export async function getProjectResearchSources(id: string) {
+  return apiRequest<{ sources: CanonicalResearchSource[]; count: number }>(
+    `/api/projects/${encodeURIComponent(id)}/research-sources`
+  );
+}

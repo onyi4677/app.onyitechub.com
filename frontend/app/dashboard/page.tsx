@@ -3,17 +3,21 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Nav from "../../components/nav";
-import { listProjects } from "../../lib/api";
+import { getModules, listProjects } from "../../lib/api";
 import type { Project } from "../../lib/types";
 
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [moduleCount, setModuleCount] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    listProjects()
-      .then(({ projects: result }) => setProjects(result))
+    Promise.all([listProjects(), getModules()])
+      .then(([projectResult, moduleResult]) => {
+        setProjects(projectResult.projects);
+        setModuleCount(Object.keys(moduleResult).length);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "Unable to load projects."))
       .finally(() => setLoading(false));
   }, []);
@@ -27,7 +31,7 @@ export default function Dashboard() {
 
       <div className="statrow">
         <div className="card stat"><span className="muted">Projects</span><strong>{projects.length}</strong></div>
-        <div className="card stat"><span className="muted">Research modules</span><strong>11</strong></div>
+        <div className="card stat"><span className="muted">Research modules</span><strong>{moduleCount}</strong></div>
         <div className="card stat"><span className="muted">Workspace</span><strong>Research-ready</strong></div>
       </div>
 

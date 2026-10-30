@@ -8,6 +8,7 @@ import WorkspaceSidebar from "../../../../../components/workspace/workspace-side
 import ResearchFoundationEditor from "../../../../../components/workspace/research-foundation-editor";
 import LiteratureEvidenceEditor from "../../../../../components/workspace/literature-evidence-editor";
 import ResearchDesignMethodologyEditor from "../../../../../components/workspace/research-design-methodology-editor";
+import StudyScreeningEditor from "../../../../../components/workspace/study-screening-editor";
 import ReferencesCitationsEditor from "../../../../../components/workspace/references-citations-editor";
 import { getModules, getProject, getProjectModule, ResearchModule } from "../../../../../lib/api";
 import type { Project } from "../../../../../lib/types";
@@ -57,6 +58,8 @@ export default function ModulePage() {
               <LiteratureEvidenceEditor projectId={project.id} />
             ) : module === "references_citations" ? (
               <ReferencesCitationsEditor projectId={project.id} />
+            ) : module === "study_screening" ? (
+              <StudyScreeningEditor projectId={project.id} />
             ) : module === "research_design_methodology" || (definition.name.toLowerCase().includes("research design") && definition.name.toLowerCase().includes("methodology")) ? (
               <ResearchDesignMethodologyEditor projectId={project.id} moduleKey={module} />
             ) : (
