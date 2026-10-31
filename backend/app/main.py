@@ -31,6 +31,7 @@ app.add_middleware(
         "https://app-onyitechub-com-git-feat-screening-12-module-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feature-cognito-self-s-fa1d46-onyitechub.vercel.app",
     ],
+    allow_origin_regex=r"https://app-onyitechub-[a-z0-9-]+-onyitechub\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
