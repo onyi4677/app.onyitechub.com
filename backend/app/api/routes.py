@@ -106,7 +106,6 @@ class CitationRequest(BaseModel):
 
 
 
-
 # ---------------------------------------------------------------------
 # Authentication and project ownership
 # ---------------------------------------------------------------------
@@ -117,17 +116,14 @@ def _require_project_access(project_id: str, user: dict[str, Any]) -> dict[str, 
         response = projects_table.get_item(Key={"id": project_id})
     except ClientError as exc:
         raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
-
     project = response.get("Item")
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-
-    owner_sub = project.get("owner_sub")
-    if owner_sub == user["sub"]:
+    if project.get("owner_sub") == user["sub"]:
         return project
 
     founder_sub = os.getenv("FOUNDER_COGNITO_SUB", "")
-    if owner_sub is None and founder_sub and user["sub"] == founder_sub:
+    if project.get("owner_sub") is None and founder_sub and user["sub"] == founder_sub:
         try:
             projects_table.update_item(
                 Key={"id": project_id},
@@ -138,23 +134,21 @@ def _require_project_access(project_id: str, user: dict[str, Any]) -> dict[str, 
         except ClientError as exc:
             if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
                 raise HTTPException(status_code=500, detail="Unable to secure legacy project") from exc
-            # Another request may have claimed the record. Re-read and verify ownership.
             try:
-                response = projects_table.get_item(Key={"id": project_id})
+                project = projects_table.get_item(Key={"id": project_id}).get("Item")
             except ClientError as read_exc:
                 raise HTTPException(status_code=500, detail="Unable to verify project ownership") from read_exc
-            project = response.get("Item")
             if not project or project.get("owner_sub") != user["sub"]:
                 raise HTTPException(status_code=404, detail="Project not found")
         else:
             project["owner_sub"] = user["sub"]
         return project
-
     raise HTTPException(status_code=404, detail="Project not found")
 
 
 def _public_project(project: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in project.items() if key != "owner_sub"}
+
 
 # ---------------------------------------------------------------------
 # Shared research-module helpers
@@ -366,7 +360,6 @@ def list_projects(user: dict[str, Any] = Depends(require_user)) -> dict[str, Any
         if project.get("owner_sub") == user["sub"]:
             visible.append(project)
         elif project.get("owner_sub") is None and founder_sub and user["sub"] == founder_sub:
-            # Claim legacy records atomically; never replace the complete DynamoDB item.
             try:
                 projects_table.update_item(
                     Key={"id": project["id"]},
@@ -386,11 +379,7 @@ def list_projects(user: dict[str, Any] = Depends(require_user)) -> dict[str, Any
                         visible.append(latest)
                 else:
                     raise HTTPException(status_code=500, detail="Unable to secure legacy project") from exc
-
-    visible.sort(
-        key=lambda item: item.get("updated_at", item.get("id", "")),
-        reverse=True,
-    )
+    visible.sort(key=lambda item: item.get("updated_at", item.get("id", "")), reverse=True)
     return {"projects": [_public_project(item) for item in visible]}
 
 
@@ -401,7 +390,7 @@ def get_project(project_id: str, user: dict[str, Any] = Depends(require_user)) -
 
 
 @router.get("/projects/{project_id}/research-sources")
-def project_research_sources(project_id: str, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+def project_research_sources(project_id: str, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
     _require_project_access(project_id, user)
     try:
         response = projects_table.get_item(Key={"id": project_id})
@@ -415,9 +404,11 @@ def project_research_sources(project_id: str, user: dict[str, Any] = Depends(req
 
 
 @router.get("/projects/{project_id}/modules/{module_key}")
-def get_project_module(project_id: str,
+def get_project_module(
+    project_id: str,
     module_key: str,
-, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
     _require_project_access(project_id, user)
     if module_key not in get_modules():
         raise HTTPException(
@@ -432,10 +423,12 @@ def get_project_module(project_id: str,
 
 
 @router.put("/projects/{project_id}/modules/{module_key}")
-def update_project_module(project_id: str,
+def update_project_module(
+    project_id: str,
     module_key: str,
     payload: ModuleUpdateRequest,
-, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
     _require_project_access(project_id, user)
     if module_key not in get_modules():
         raise HTTPException(
@@ -544,9 +537,11 @@ def update_project_module(project_id: str,
 # ---------------------------------------------------------------------
 
 @router.post("/projects/{project_id}/literature/sources")
-def add_literature_source(project_id: str,
+def add_literature_source(
+    project_id: str,
     payload: LiteratureSourceRequest,
-, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
     _require_project_access(project_id, user)
     item = {
         "source_id": str(uuid4()),
@@ -567,9 +562,11 @@ def add_literature_source(project_id: str,
 
 
 @router.post("/projects/{project_id}/literature/evidence")
-def add_evidence_item(project_id: str,
+def add_evidence_item(
+    project_id: str,
     payload: EvidenceItemRequest,
-, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
     _require_project_access(project_id, user)
     module = _project_module_or_empty(
         project_id,
@@ -604,9 +601,11 @@ def add_evidence_item(project_id: str,
 
 
 @router.post("/projects/{project_id}/literature/claims")
-def add_literature_claim(project_id: str,
+def add_literature_claim(
+    project_id: str,
     payload: ClaimRequest,
-, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
     _require_project_access(project_id, user)
     module = _project_module_or_empty(
         project_id,
@@ -664,9 +663,11 @@ def add_literature_claim(project_id: str,
 # ---------------------------------------------------------------------
 
 @router.post("/projects/{project_id}/references")
-def add_reference(project_id: str,
+def add_reference(
+    project_id: str,
     payload: ReferenceRequest,
-, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
     _require_project_access(project_id, user)
     item = {
         "reference_id": str(uuid4()),
@@ -687,9 +688,11 @@ def add_reference(project_id: str,
 
 
 @router.post("/projects/{project_id}/citations")
-def add_citation(project_id: str,
+def add_citation(
+    project_id: str,
     payload: CitationRequest,
-, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
     _require_project_access(project_id, user)
     module = _project_module_or_empty(
         project_id,
@@ -729,8 +732,10 @@ def add_citation(project_id: str,
 
 
 @router.get("/projects/{project_id}/citation-integrity")
-def citation_integrity(project_id: str,
-, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+def citation_integrity(
+    project_id: str,
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
     _require_project_access(project_id, user)
     module = _project_module_or_empty(
         project_id,
