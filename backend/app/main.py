@@ -29,6 +29,7 @@ app.add_middleware(
         "https://app-onyitechub-com-git-fix-methodology-screen-586e55-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feat-research-lifecycl-166406-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feat-screening-12-module-onyitechub.vercel.app",
+        "https://app-onyitechub-com-git-feature-cognito-self-s-fa1d46-onyitechub.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
