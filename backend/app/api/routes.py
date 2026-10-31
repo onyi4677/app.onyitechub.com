@@ -401,8 +401,8 @@ def get_project(project_id: str, user: dict[str, Any] = Depends(require_user)) -
 
 
 @router.get("/projects/{project_id}/research-sources")
-def project_research_sources(project_id: str, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-_require_project_access(project_id, user)
+def project_research_sources(project_id: str, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     try:
         response = projects_table.get_item(Key={"id": project_id})
     except ClientError as exc:
@@ -415,11 +415,10 @@ _require_project_access(project_id, user)
 
 
 @router.get("/projects/{project_id}/modules/{module_key}")
-def get_project_module(
-    project_id: str,
+def get_project_module(project_id: str,
     module_key: str,
-, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-_require_project_access(project_id, user)
+, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     if module_key not in get_modules():
         raise HTTPException(
             status_code=404,
@@ -433,12 +432,11 @@ _require_project_access(project_id, user)
 
 
 @router.put("/projects/{project_id}/modules/{module_key}")
-def update_project_module(
-    project_id: str,
+def update_project_module(project_id: str,
     module_key: str,
     payload: ModuleUpdateRequest,
-, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-_require_project_access(project_id, user)
+, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     if module_key not in get_modules():
         raise HTTPException(
             status_code=404,
@@ -546,11 +544,10 @@ _require_project_access(project_id, user)
 # ---------------------------------------------------------------------
 
 @router.post("/projects/{project_id}/literature/sources")
-def add_literature_source(
-    project_id: str,
+def add_literature_source(project_id: str,
     payload: LiteratureSourceRequest,
-, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-_require_project_access(project_id, user)
+, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     item = {
         "source_id": str(uuid4()),
         **payload.model_dump(),
@@ -570,11 +567,10 @@ _require_project_access(project_id, user)
 
 
 @router.post("/projects/{project_id}/literature/evidence")
-def add_evidence_item(
-    project_id: str,
+def add_evidence_item(project_id: str,
     payload: EvidenceItemRequest,
-, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-_require_project_access(project_id, user)
+, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(
         project_id,
         "literature_evidence",
@@ -608,11 +604,10 @@ _require_project_access(project_id, user)
 
 
 @router.post("/projects/{project_id}/literature/claims")
-def add_literature_claim(
-    project_id: str,
+def add_literature_claim(project_id: str,
     payload: ClaimRequest,
-, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-_require_project_access(project_id, user)
+, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(
         project_id,
         "literature_evidence",
@@ -669,11 +664,10 @@ _require_project_access(project_id, user)
 # ---------------------------------------------------------------------
 
 @router.post("/projects/{project_id}/references")
-def add_reference(
-    project_id: str,
+def add_reference(project_id: str,
     payload: ReferenceRequest,
-, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-_require_project_access(project_id, user)
+, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     item = {
         "reference_id": str(uuid4()),
         **payload.model_dump(),
@@ -693,11 +687,10 @@ _require_project_access(project_id, user)
 
 
 @router.post("/projects/{project_id}/citations")
-def add_citation(
-    project_id: str,
+def add_citation(project_id: str,
     payload: CitationRequest,
-, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-_require_project_access(project_id, user)
+, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(
         project_id,
         "references_citations",
@@ -736,10 +729,9 @@ _require_project_access(project_id, user)
 
 
 @router.get("/projects/{project_id}/citation-integrity")
-def citation_integrity(
-    project_id: str,
-, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-_require_project_access(project_id, user)
+def citation_integrity(project_id: str,
+, user: dict[str, Any] = Depends(require_user), user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    _require_project_access(project_id, user)
     module = _project_module_or_empty(
         project_id,
         "references_citations",
