@@ -10,6 +10,7 @@ from app.modules.registry import get_modules
 def project_with_sources():
     return {
         "id": "project-1",
+        "owner_sub": "screening-test-user",
         "modules": {
             "literature_evidence": {
                 "sources": [
@@ -66,6 +67,7 @@ def record(source_id="lit-1", **overrides):
 
 class StudyScreeningApiTests(unittest.TestCase):
     def setUp(self):
+        self.user = {"sub": "screening-test-user", "username": "screening-tester"}
         self.project = project_with_sources()
         self.get_item_patcher = patch("app.api.routes.projects_table.get_item")
         self.get_item = self.get_item_patcher.start()
@@ -82,6 +84,7 @@ class StudyScreeningApiTests(unittest.TestCase):
             "project-1",
             "study_screening",
             ModuleUpdateRequest(content={"records": records, "protocol_version": "1", "review_type": "scoping", "duplicates_removed": 0}),
+            user=self.user,
         )
 
     def update_with_content(self, content):
@@ -89,6 +92,7 @@ class StudyScreeningApiTests(unittest.TestCase):
             "project-1",
             "study_screening",
             ModuleUpdateRequest(content=content),
+            user=self.user,
         )
 
     def test_registry_contains_twelve_modules_and_keeps_integrity_separate(self):
@@ -206,7 +210,7 @@ class StudyScreeningApiTests(unittest.TestCase):
             "protocol_version": "1",
         }
 
-        response = get_project_module("project-1", "study_screening")
+        response = get_project_module("project-1", "study_screening", user=self.user)
 
         self.assertEqual(response["content"]["records"], legacy_screening["records"])
         self.assertEqual(response["content"]["protocol_version"], "1")
@@ -226,6 +230,7 @@ class StudyScreeningApiTests(unittest.TestCase):
             "project-1",
             "methodology",
             ModuleUpdateRequest(content={"review_question": "Updated question"}),
+            user=self.user,
         )
 
         self.assertEqual(self.save_module.call_args.args[1], "methodology")
