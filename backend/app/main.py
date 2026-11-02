@@ -25,7 +25,7 @@ app.add_middleware(
         "https://app-onyitechub-3f1jipt6s-onyitechub.vercel.app",
         "https://app-onyitechub-k2adn6n2a-onyitechub.vercel.app",
         "https://app-onyitechub-6acf3n567-onyitechub.vercel.app",
-        "https://app-onyitechub-3vxwlzaut-onyitechub.vercel.app",
+        "https://app-onyitechub-com-git-feature-instruments-de-b4bd26-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-fix-methodology-screen-586e55-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feat-research-lifecycl-166406-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feat-screening-12-module-onyitechub.vercel.app",
