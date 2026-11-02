@@ -51,7 +51,7 @@ function normalize(data: Record<string, unknown>): InstrumentForm {
     purpose: typeof data.purpose === "string" ? data.purpose : "",
     target_population: typeof data.target_population === "string" ? data.target_population : "",
     research_context: typeof data.research_context === "string" ? data.research_context : "",
-    administration_mode: typeof data.administration_mode === "string" ? data.administration_mode : base.administration_mode,
+    administration_mode: typeof data.administration_mode === "string" ? data.administration_mode : (data.research_pathway === "secondary_data" ? "document_review" : base.administration_mode),
     consent_plan: typeof data.consent_plan === "string" ? data.consent_plan : "",
     provenance: data.provenance === "established" || data.provenance === "ai_assisted" ? data.provenance : "researcher_developed",
     provenance_details: typeof data.provenance_details === "string" ? data.provenance_details : "",
@@ -145,7 +145,6 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
       const saved = result.content && typeof result.content === "object" ? result.content : payload;
       setExistingData(saved);
       setForms(nextForms);
-      setMessage("Instrument development plan saved. Each research pathway is stored separately.");
       setMessage("Instrument development plan saved. Refresh the page to verify that it reloads.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed. Please try again.");
