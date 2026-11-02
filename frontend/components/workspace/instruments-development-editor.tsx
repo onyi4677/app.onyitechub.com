@@ -60,7 +60,12 @@ function normalize(data: Record<string, unknown>): InstrumentForm {
 }
 
 export default function InstrumentsDevelopmentEditor({ projectId }: { projectId: string }) {
-  const [form, setForm] = useState<InstrumentForm>(emptyForm);
+  const [activePathway, setActivePathway] = useState<InstrumentForm["research_pathway"]>("primary_data");
+  const [forms, setForms] = useState<Record<InstrumentForm["research_pathway"], InstrumentForm>>({
+    primary_data: emptyForm(),
+    secondary_data: { ...emptyForm(), research_pathway: "secondary_data", instrument_type: "document_extraction" },
+  });
+  const form = forms[activePathway];
   const [existingData, setExistingData] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -74,7 +79,22 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
         if (!active) return;
         const saved = content && typeof content === "object" ? content : {};
         setExistingData(saved);
-        setForm(normalize(saved));
+        const storedPathways = saved.pathways && typeof saved.pathways === "object"
+          ? saved.pathways as Record<string, unknown>
+          : {};
+        const legacyPathway = saved.research_pathway === "secondary_data" ? "secondary_data" : "primary_data";
+        const primarySaved = storedPathways.primary_data && typeof storedPathways.primary_data === "object"
+          ? storedPathways.primary_data as Record<string, unknown>
+          : legacyPathway === "primary_data" ? saved : {};
+        const secondarySaved = storedPathways.secondary_data && typeof storedPathways.secondary_data === "object"
+          ? storedPathways.secondary_data as Record<string, unknown>
+          : legacyPathway === "secondary_data" ? saved : {};
+        const nextForms = {
+          primary_data: normalize({ ...primarySaved, research_pathway: "primary_data" }),
+          secondary_data: normalize({ ...secondarySaved, research_pathway: "secondary_data" }),
+        };
+        setForms(nextForms);
+        setActivePathway(legacyPathway);
       })
       .catch((err) => {
         if (active) setError(err instanceof Error ? err.message : "Could not load Instruments & Data Collection.");
@@ -86,7 +106,16 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
   }, [projectId]);
 
   function update<K extends keyof InstrumentForm>(key: K, value: InstrumentForm[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForms((current) => ({
+      ...current,
+      [activePathway]: { ...current[activePathway], [key]: value },
+    }));
+    setMessage("");
+    setError("");
+  }
+
+  function changePathway(nextPathway: InstrumentForm["research_pathway"]) {
+    setActivePathway(nextPathway);
     setMessage("");
     setError("");
   }
@@ -101,11 +130,22 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
     setError("");
     try {
       // Keep unknown/legacy keys intact: this editor only owns the fields above.
-      const payload = { ...existingData, ...form, status };
+      const pathwayForm = { ...form, research_pathway: activePathway, status };
+      const nextForms = { ...forms, [activePathway]: pathwayForm };
+      const pathways = {
+        ...(existingData.pathways && typeof existingData.pathways === "object"
+          ? existingData.pathways as Record<string, unknown>
+          : {}),
+        [activePathway]: pathwayForm,
+      };
+      // Keep legacy root-level fields aligned with the most recently saved pathway,
+      // while storing each pathway independently to prevent one overwriting the other.
+      const payload = { ...existingData, ...pathwayForm, research_pathway: activePathway, pathways };
       const result = await saveProjectModule(projectId, "instruments", payload);
       const saved = result.content && typeof result.content === "object" ? result.content : payload;
       setExistingData(saved);
-      setForm(normalize(saved));
+      setForms(nextForms);
+      setMessage("Instrument development plan saved. Each research pathway is stored separately.");
       setMessage("Instrument development plan saved. Refresh the page to verify that it reloads.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed. Please try again.");
@@ -123,7 +163,7 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
         <h3>Plan a research instrument</h3>
         <p className="muted">Create the planning record for an instrument or structured extraction form. This foundation does not yet publish surveys, collect respondent data, or certify an instrument as validated.</p>
         <label>Research pathway
-          <select value={form.research_pathway} onChange={(e) => update("research_pathway", e.target.value as InstrumentForm["research_pathway"])}>
+          <select value={activePathway} onChange={(e) => changePathway(e.target.value as InstrumentForm["research_pathway"])}>
             <option value="primary_data">Primary data — collecting information from participants or observations</option>
             <option value="secondary_data">Secondary data — extracting information from existing documents, studies or datasets</option>
           </select>
