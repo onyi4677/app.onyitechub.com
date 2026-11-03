@@ -15,8 +15,11 @@ from pypdf import PdfReader
 
 from app.services.integrity_checks import run_deterministic_checks
 from app.services.integrity_submissions import (
+    SubmissionExpiredError,
     SubmissionNotFoundError,
     SubmissionValidationError,
+    _assert_within_retention_window,
+    _now_epoch,
     _public_submission,
     _resources,
 )
@@ -112,6 +115,7 @@ def extract_and_check_submission(owner_sub: str, submission_id: str) -> dict[str
             "extraction": item.get("extraction", {}),
             "already_processed": True,
         }
+    _assert_within_retention_window(item)
 
     try:
         obj = s3.get_object(Bucket=bucket, Key=item["object_key"])
