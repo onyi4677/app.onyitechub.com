@@ -1,6 +1,9 @@
 import io
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
+
+from botocore.exceptions import ClientError
 
 from docx import Document
 from pypdf import PdfWriter
@@ -11,7 +14,7 @@ from app.services.integrity_extraction import (
     _extract_pdf,
     extract_and_check_submission,
 )
-from app.services.integrity_submissions import SubmissionValidationError
+from app.services.integrity_submissions import SubmissionExpiredError, SubmissionValidationError
 
 
 class FakeBody:
@@ -26,6 +29,7 @@ class FakeTable:
     def __init__(self, item):
         self.item = item
         self.updates = []
+        self.update_error = None
 
     def get_item(self, **kwargs):
         if kwargs["Key"]["owner_sub"] != self.item["owner_sub"]:
@@ -34,6 +38,8 @@ class FakeTable:
 
     def update_item(self, **kwargs):
         self.updates.append(kwargs)
+        if self.update_error:
+            raise self.update_error
 
 
 class FakeS3:
@@ -114,6 +120,10 @@ class ManuscriptExtractionTests(unittest.TestCase):
             "object_key": "submissions/user-a/submission-1/original.docx",
             "status": "uploaded",
             "created_at": "2026-11-03T10:00:00+00:00",
+            "expires_at": int(datetime.now(timezone.utc).timestamp()) + 2000,
+            "cleanup_status": "pending",
+            "cleanup_at": int(datetime.now(timezone.utc).timestamp()) + 1700,
+            "content_retention_status": "available",
         }
         table = FakeTable(item)
         s3 = FakeS3(payload)
@@ -122,6 +132,7 @@ class ManuscriptExtractionTests(unittest.TestCase):
 
         self.assertEqual(result["submission"]["status"], "extraction_completed")
         self.assertEqual(result["extraction"]["status"], "text_extracted")
+        self.assertIn("cleanup_status = :cleanup_pending", table.updates[0]["ConditionExpression"])
         self.assertIn(b"A sample manuscript abstract.", s3.puts[0]["Body"])
         self.assertEqual(s3.puts[0]["ServerSideEncryption"], "AES256")
         self.assertNotIn("full_text", table.updates[0]["ExpressionAttributeValues"][":report"])
@@ -138,6 +149,72 @@ class ManuscriptExtractionTests(unittest.TestCase):
             with self.assertRaises(Exception):
                 extract_and_check_submission("user-b", "submission-1")
         self.assertEqual(s3.puts, [])
+
+    def test_expired_submission_cannot_start_extraction(self):
+        item = {
+            "owner_sub": "user-a",
+            "submission_id": "submission-expired",
+            "status": "uploaded",
+            "cleanup_status": "pending",
+            "cleanup_at": 100,
+            "expires_at": 400,
+        }
+        table = FakeTable(item)
+        s3 = FakeS3(b"")
+        with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")), patch.object(
+            extraction, "_assert_within_retention_window", side_effect=SubmissionExpiredError("expired")
+        ):
+            with self.assertRaises(SubmissionExpiredError):
+                extract_and_check_submission("user-a", "submission-expired")
+        self.assertEqual(s3.puts, [])
+
+    def test_saved_report_remains_available_after_content_expiry(self):
+        report = {"word_count": 123, "findings": []}
+        item = {
+            "owner_sub": "user-a",
+            "submission_id": "submission-retained",
+            "file_name": "paper.pdf",
+            "content_type": "application/pdf",
+            "expected_size_bytes": 100,
+            "object_key": "submissions/user-a/submission-retained/original.pdf",
+            "status": "extraction_completed",
+            "deterministic_report": report,
+            "extraction": {"status": "text_extracted"},
+            "content_retention_status": "expired",
+        }
+        table = FakeTable(item)
+        s3 = FakeS3(b"")
+        with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")):
+            result = extract_and_check_submission("user-a", "submission-retained")
+        self.assertTrue(result["already_processed"])
+        self.assertEqual(result["report"], report)
+        self.assertEqual(s3.puts, [])
+
+    def test_failed_conditional_save_removes_derived_object(self):
+        payload = make_docx()
+        item = {
+            "owner_sub": "user-a",
+            "submission_id": "submission-race",
+            "file_name": "paper.docx",
+            "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "expected_size_bytes": len(payload),
+            "object_key": "submissions/user-a/submission-race/original.docx",
+            "status": "uploaded",
+            "created_at": "2026-11-03T10:00:00+00:00",
+            "expires_at": int(datetime.now(timezone.utc).timestamp()) + 2000,
+            "cleanup_status": "pending",
+            "cleanup_at": int(datetime.now(timezone.utc).timestamp()) + 1700,
+        }
+        table = FakeTable(item)
+        table.update_error = ClientError(
+            {"Error": {"Code": "ConditionalCheckFailedException", "Message": "expired"}},
+            "UpdateItem",
+        )
+        s3 = FakeS3(payload)
+        with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")):
+            with self.assertRaises(SubmissionExpiredError):
+                extract_and_check_submission("user-a", "submission-race")
+        self.assertEqual(s3.deleted[0]["Key"], "submissions/user-a/submission-race/derived/extracted.txt")
 
 
 if __name__ == "__main__":
