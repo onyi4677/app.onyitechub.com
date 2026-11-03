@@ -35,7 +35,7 @@ The feature remains unavailable and returns HTTP 503 until both resource variabl
 ## IAM permissions to add only after code review
 
 Lambda execution role will need narrowly scoped:
-- `s3:PutObject` is not needed for browser uploads via presigned POST, but `s3:GetObject`, `s3:HeadObject` (covered by `s3:GetObject`), and `s3:DeleteObject` are needed for completion/deletion; the presign operation also requires signing permission context for the requested operation. Validate exact IAM action requirements in deployment testing.
+- `s3:PutObject`, `s3:GetObject` (also covers `HeadObject`), and `s3:DeleteObject` are required on the dedicated object prefix. The Lambda role's `PutObject` permission is required for the presigned POST to authorize browser uploads.
 - DynamoDB `PutItem`, `GetItem`, `Query`, `UpdateItem`, and `DeleteItem` on the dedicated table.
 
 Do not attach Lambda to a VPC or create NAT Gateway for this feature.
