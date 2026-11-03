@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.auth import require_user
+from app.services.integrity_extraction import extract_and_check_submission
 from app.services.integrity_submissions import (
     SubmissionConfigurationError,
     SubmissionNotFoundError,
@@ -62,6 +63,17 @@ def finish_submission(
 ) -> dict[str, Any]:
     try:
         return {"submission": complete_submission(user["sub"], submission_id)}
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@router.post("/submissions/{submission_id}/extract")
+def extract_submission(
+    submission_id: str,
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
+    try:
+        return extract_and_check_submission(user["sub"], submission_id)
     except Exception as exc:
         _handle_error(exc)
 
