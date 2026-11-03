@@ -72,6 +72,13 @@ export type IntegrityFinding = {
   evidence?: string;
 };
 
+export type IntegrityDocumentType = {
+  key: "empirical_research" | "review_paper" | "seminar_paper" | "unknown";
+  label: string;
+  confidence: "high" | "medium" | "low";
+  basis: string;
+};
+
 export type IntegrityExtractionResult = {
   submission: IntegritySubmission;
   report: {
@@ -79,6 +86,8 @@ export type IntegrityExtractionResult = {
     word_count: number;
     character_count: number;
     detected_sections: string[];
+    document_type?: IntegrityDocumentType;
+    assessment_notes?: string[];
     citation_pattern_count?: number;
     doi_pattern_count?: number;
     findings: IntegrityFinding[];
