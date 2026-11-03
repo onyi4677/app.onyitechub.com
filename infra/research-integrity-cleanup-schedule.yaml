@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Schedule the existing Onyitech Research API Lambda to clean expired manuscript objects.
+
+Parameters:
+  LambdaFunctionName:
+    Type: String
+    Default: onyitech-research-api
+    Description: Existing API Lambda that dispatches the scheduled cleanup event.
+
+Resources:
+  IntegrityRetentionCleanupRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: onyitech-integrity-retention-cleanup
+      Description: Runs the owner-scoped manuscript retention cleanup every minute.
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Id: IntegrityRetentionCleanupLambda
+          Arn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaFunctionName}
+          Input: '{"source":"aws.events","detail":{"task":"integrity-retention-cleanup"}}'
+
+  AllowEventBridgeToInvokeIntegrityApi:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LambdaFunctionName
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt IntegrityRetentionCleanupRule.Arn
+
+Outputs:
+  CleanupRuleArn:
+    Description: EventBridge rule invoking the cleanup handler every minute.
+    Value: !GetAtt IntegrityRetentionCleanupRule.Arn
