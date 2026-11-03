@@ -38,7 +38,8 @@ Configure S3 CORS with the exact production frontend origin `https://app.onyitec
 - Password-protected PDFs, scanned-PDF OCR, images embedded in DOCX, and alternative document formats are not supported in this stage. A scan without a text layer produces a no-readable-text result.
 - Extracted text is stored only in private S3; DynamoDB stores a compact report and extraction metadata, not the full manuscript text.
 - Deleting a submission also deletes its derived extracted-text object.
-- No automatic retention period is configured until the product retention policy is agreed. External launch remains blocked until retention and deletion expectations are finalized.
+- **Proposed retention policy (awaiting product confirmation):** retain the original manuscript and derived extracted-text object for no more than 24 hours from successful upload; retain the compact deterministic report and submission metadata until the user deletes the submission. This separates manuscript-content retention from the usefulness of the review result.
+- **Not yet implemented:** the current code does not automatically expire either S3 object. Do not treat a one-day S3 lifecycle rule as an exact 24-hour guarantee. Before external launch, implement and verify a scheduled cleanup process that checks an explicit expiry timestamp, deletes both content objects, and records cleanup status without deleting the report/metadata.
 
 ## IAM permissions to add only after code review
 
