@@ -24,6 +24,7 @@ class FakeTable:
         self.delete_calls = []
         self.query_items = []
         self.query_calls = []
+        self.update_error = None
 
     def query(self, **kwargs):
         self.query_calls.append(kwargs)
@@ -37,6 +38,8 @@ class FakeTable:
 
     def update_item(self, **kwargs):
         self.update_calls.append(kwargs)
+        if self.update_error:
+            raise self.update_error
 
     def delete_item(self, **kwargs):
         self.delete_calls.append(kwargs)
@@ -241,6 +244,32 @@ class IntegritySubmissionValidationTests(unittest.TestCase):
         with patch.object(submissions, "_resources", return_value=(FakeS3(), table, "private-bucket")), patch.object(submissions, "_now_epoch", return_value=101):
             with self.assertRaises(SubmissionExpiredError):
                 complete_submission("user-a", "submission-3")
+
+    def test_completion_racing_with_cleanup_returns_expired(self):
+        from botocore.exceptions import ClientError
+
+        item = {
+            "owner_sub": "user-a",
+            "submission_id": "submission-race",
+            "file_name": "paper.pdf",
+            "content_type": "application/pdf",
+            "expected_size_bytes": 1024,
+            "object_key": "submissions/user-a/submission-race/original.pdf",
+            "status": "pending_upload",
+            "created_at": "2026-11-03T10:00:00+00:00",
+            "expires_at": 2000,
+            "cleanup_status": "pending",
+            "cleanup_at": 1700,
+        }
+        table = FakeTable(item)
+        table.update_error = ClientError(
+            {"Error": {"Code": "ConditionalCheckFailedException", "Message": "cleanup started"}},
+            "UpdateItem",
+        )
+        s3 = FakeS3()
+        with patch.object(submissions, "_resources", return_value=(s3, table, "private-bucket")), patch.object(submissions, "_now_epoch", return_value=1000):
+            with self.assertRaises(SubmissionExpiredError):
+                complete_submission("user-a", "submission-race")
 
 
 if __name__ == "__main__":
