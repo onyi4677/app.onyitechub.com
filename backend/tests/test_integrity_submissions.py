@@ -137,7 +137,7 @@ class IntegritySubmissionValidationTests(unittest.TestCase):
         }
         table = FakeTable(item)
         s3 = FakeS3()
-        with patch.object(submissions, "_resources", return_value=(s3, table, "private-bucket")):
+        with patch.object(submissions, "_resources", return_value=(s3, table, "private-bucket")), patch.object(submissions, "_now_epoch", return_value=1000):
             result = complete_submission("user-a", "submission-1")
 
         self.assertEqual(result["status"], "uploaded")
