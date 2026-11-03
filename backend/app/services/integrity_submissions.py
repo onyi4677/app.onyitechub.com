@@ -105,11 +105,11 @@ def create_submission(
             ],
             ExpiresIn=UPLOAD_URL_SECONDS,
         )
-    except ClientError:
+    except Exception:
         # A failed signing step must not leave an orphaned pending record.
         try:
             table.delete_item(Key={"owner_sub": owner_sub, "submission_id": submission_id})
-        except ClientError:
+        except Exception:
             pass
         raise
     return {
@@ -189,11 +189,12 @@ def list_submissions(owner_sub: str) -> list[dict[str, Any]]:
     items = response.get("Items", [])
     while response.get("LastEvaluatedKey"):
         response = table.query(
-            KeyConditionExpression=boto3.dynamodb.conditions.Key("owner_sub").eq(owner_sub),
+            KeyConditionExpression=Key("owner_sub").eq(owner_sub),
             ScanIndexForward=False,
             ExclusiveStartKey=response["LastEvaluatedKey"],
         )
         items.extend(response.get("Items", []))
+    items.sort(key=lambda item: item.get("created_at", ""), reverse=True)
     return [_public_submission(item) for item in items]
 
 
