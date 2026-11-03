@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.api.integrity_routes import router as integrity_router
+from app.services.integrity_submissions import cleanup_expired_submissions
 from mangum import Mangum
 
 app = FastAPI(
@@ -50,4 +51,15 @@ def root() -> dict[str, str]:
     }
 
 
-handler = Mangum(app)
+api_handler = Mangum(app)
+
+
+def handler(event, context):
+    """Dispatch scheduled retention cleanup events; send all other events to FastAPI."""
+    if (
+        isinstance(event, dict)
+        and event.get("source") == "aws.events"
+        and event.get("detail", {}).get("task") == "integrity-retention-cleanup"
+    ):
+        return cleanup_expired_submissions()
+    return api_handler(event, context)
