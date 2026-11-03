@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import io
-import os
 import zipfile
+from datetime import datetime, timezone
 from typing import Any
 
 from docx import Document
@@ -143,7 +143,7 @@ def extract_and_check_submission(owner_sub: str, submission_id: str) -> dict[str
         "word_count": report.get("word_count", 0),
         "character_count": report.get("character_count", 0),
         "sha256": content_sha256,
-        "extracted_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        "extracted_at": datetime.now(timezone.utc).isoformat(),
     }
     table.update_item(
         Key={"owner_sub": owner_sub, "submission_id": submission_id},
