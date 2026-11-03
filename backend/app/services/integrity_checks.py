@@ -11,25 +11,25 @@ from typing import Any
 
 
 SECTION_PATTERNS: dict[str, tuple[str, ...]] = {
-    "abstract": (r"^\\s*abstract\\s*$",),
-    "introduction": (r"^\\s*(?:1\\.?\\s*)?introduction\\s*$", r"^\\s*background\\s*$"),
+    "abstract": (r"^\s*abstract\s*$",),
+    "introduction": (r"^\s*(?:1\.?\s*)?introduction\s*$", r"^\s*background\s*$"),
     "methods": (
-        r"^\\s*(?:research\\s+)?methods?\\s*$",
-        r"^\\s*methodology\\s*$",
-        r"^\\s*materials\\s+and\\s+methods\\s*$",
+        r"^\s*(?:research\s+)?methods?\s*$",
+        r"^\s*methodology\s*$",
+        r"^\s*materials\s+and\s+methods\s*$",
     ),
-    "results": (r"^\\s*results?\\s*$", r"^\\s*findings\\s*$"),
-    "discussion": (r"^\\s*discussion\\s*$",),
-    "conclusion": (r"^\\s*conclusions?\\s*$",),
-    "references": (r"^\\s*(?:references|bibliography|works\\s+cited)\\s*$",),
+    "results": (r"^\s*results?\s*$", r"^\s*findings\s*$"),
+    "discussion": (r"^\s*discussion\s*$",),
+    "conclusion": (r"^\s*conclusions?\s*$",),
+    "references": (r"^\s*(?:references|bibliography|works\s+cited)\s*$",),
 }
 
-DOI_PATTERN = re.compile(r"10\\.\\d{4,9}/[-._;()/:A-Z0-9]+", re.IGNORECASE)
-URL_DOI_PATTERN = re.compile(r"https?://(?:dx\\.)?doi\\.org/[^\\s)]+", re.IGNORECASE)
-IN_TEXT_AUTHOR_YEAR = re.compile(r"\\([A-Z][A-Za-z'’-]+(?:\\s+et\\s+al\\.)?,?\\s*[,;]?\\s*(?:19|20)\\d{2}[a-z]?\\)")
+DOI_PATTERN = re.compile(r"10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.IGNORECASE)
+URL_DOI_PATTERN = re.compile(r"https?://(?:dx\.)?doi\.org/[^\s)]+", re.IGNORECASE)
+IN_TEXT_AUTHOR_YEAR = re.compile(r"\([A-Z][A-Za-z'’-]+(?:\s+et\s+al\.)?,?\s*[,;]?\s*(?:19|20)\d{2}[a-z]?\)")
 PLACEHOLDER_PATTERN = re.compile(
-    r"\\b(?:insert\\s+(?:text|reference|citation)|to\\s+be\\s+completed|lorem\\s+ipsum|xxx+)\\b"
-    r"|\\[\\s*(?:citation|reference|insert|author)\\s*\\]",
+    r"\b(?:insert\s+(?:text|reference|citation)|to\s+be\s+completed|lorem\s+ipsum|xxx+)\b"
+    r"|\[\s*(?:citation|reference|insert|author)\s*\]",
     re.IGNORECASE,
 )
 
@@ -66,7 +66,7 @@ def _classify_document_type(lines: list[str], detected: list[str]) -> dict[str, 
         if len(line.split()) <= 8
     )
 
-    if re.search(r"\\bseminar\\s+(?:paper|report)\\b", opening_text):
+    if re.search(r"\bseminar\s+(?:paper|report)\b", opening_text):
         return {
             "key": "seminar_paper",
             "label": "Seminar paper",
@@ -75,27 +75,24 @@ def _classify_document_type(lines: list[str], detected: list[str]) -> dict[str, 
         }
 
     review_heading = re.search(
-        r"\\b(?:conceptual|systematic|scoping|narrative|integrative|literature|critical|rapid|umbrella|bibliometric)\\s+review\\b"
-        r"|\\breview\\s+of\\s+literature\\b",
+        r"\b(?:conceptual|systematic|scoping|narrative|integrative|literature|critical|rapid|umbrella|bibliometric)\s+review\b"
+        r"|\breview\s+of\s+literature\b",
         heading_text,
     )
     review_title = re.search(
-        r"\\b(?:systematic|scoping|narrative|integrative|literature|critical|rapid|umbrella|bibliometric)\\s+review\\b",
+        r"\b(?:systematic|scoping|narrative|integrative|literature|critical|rapid|umbrella|bibliometric)\s+review\b",
         opening_text,
     )
     if review_heading or review_title:
-        basis = (
-            "A review-type title or section heading was detected."
-        )
         return {
             "key": "review_paper",
             "label": "Review / conceptual paper",
             "confidence": "high" if review_heading else "medium",
-            "basis": basis,
+            "basis": "A review-type title or section heading was detected.",
         }
 
     explicit_empirical_title = re.search(
-        r"\\b(?:research article|original research|empirical study|empirical research)\\b",
+        r"\b(?:research article|original research|empirical study|empirical research)\b",
         opening_text,
     )
     if (
@@ -146,7 +143,7 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
             "assessment_notes": [],
         }
 
-    normalized = text.replace("\\r\\n", "\\n").replace("\\r", "\\n")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     lines = [line.strip() for line in normalized.splitlines() if line.strip()]
     lowered_lines = [line.lower() for line in lines]
     detected: list[str] = []
@@ -189,8 +186,8 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
 
     placeholders = list(PLACEHOLDER_PATTERN.finditer(normalized))
     for match in placeholders[:10]:
-        line_start = normalized.rfind("\\n", 0, match.start()) + 1
-        line_end = normalized.find("\\n", match.start())
+        line_start = normalized.rfind("\n", 0, match.start()) + 1
+        line_end = normalized.find("\n", match.start())
         if line_end < 0:
             line_end = len(normalized)
         findings.append(_finding(
@@ -202,7 +199,7 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
     doi_values = URL_DOI_PATTERN.findall(normalized)
     bare_dois = DOI_PATTERN.findall(normalized)
     doi_count = max(len(doi_values), len(bare_dois))
-    doi_like = re.findall(r"10\\.\\d{3,}/[^\\s]+", normalized, re.IGNORECASE)
+    doi_like = re.findall(r"10\.\d{3,}/[^\s]+", normalized, re.IGNORECASE)
     valid_doi_tokens = {value.rstrip(".,;)]}") for value in DOI_PATTERN.findall(normalized)}
     for token in doi_like[:10]:
         cleaned = token.rstrip(".,;)]}")
@@ -218,21 +215,20 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
          if re.match(r"^(references|bibliography|works cited)$", line)),
         None,
     )
-    duplicate_reference_lines: list[str] = []
     if reference_start is not None:
         reference_lines = [
-            re.sub(r"\\s+", " ", line).strip().lower()
+            re.sub(r"\s+", " ", line).strip().lower()
             for line in lines[reference_start + 1:]
             if len(line.split()) >= 4
         ]
         counts = Counter(reference_lines)
-        duplicate_reference_lines = [line for line, count in counts.items() if count > 1]
-        for duplicate in duplicate_reference_lines[:10]:
-            findings.append(_finding(
-                "references.exact_duplicate_line", "major", "Possible duplicate reference entry",
-                "An identical non-heading line appears more than once in the detected references section. Confirm whether this is a duplicated reference.",
-                duplicate,
-            ))
+        for duplicate, count in counts.items():
+            if count > 1:
+                findings.append(_finding(
+                    "references.exact_duplicate_line", "major", "Possible duplicate reference entry",
+                    "An identical non-heading line appears more than once in the detected references section. Confirm whether this is a duplicated reference.",
+                    duplicate,
+                ))
 
     citation_count = len(IN_TEXT_AUTHOR_YEAR.findall(normalized))
     status = "review_required" if findings else "no_deterministic_flags"
