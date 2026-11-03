@@ -21,7 +21,7 @@ The feature remains unavailable and returns HTTP 503 until both resource variabl
 - `GET /api/integrity/submissions` and `GET /api/integrity/submissions/{id}`: owner-scoped metadata.
 - `DELETE /api/integrity/submissions/{id}`: deletes the owner's object and metadata.
 
-## Limits and safeguards
+## S3 browser-upload CORS\n\nBefore enabling the bucket, configure S3 CORS to allow the production frontend origin `https://app.onyitechub.com` to use `POST` and expose no unnecessary headers. Add the exact Vercel preview origin only when testing a known preview; do not use wildcard origins. The browser sends the presigned form directly to S3 and does not send Cognito credentials to S3.\n\n## Limits and safeguards
 
 - Only PDF and DOCX MIME/extension pairs are accepted.
 - Maximum declared and policy-enforced upload size: 15 MiB.
