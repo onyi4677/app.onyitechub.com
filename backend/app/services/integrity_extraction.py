@@ -8,6 +8,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from docx import Document
+from docx.table import Table
+from docx.text.paragraph import Paragraph
+from docx.oxml.ns import qn
 from pypdf import PdfReader
 
 from app.services.integrity_checks import run_deterministic_checks
@@ -46,15 +49,21 @@ def _extract_docx(payload: bytes) -> str:
     except Exception as exc:
         raise SubmissionValidationError("The DOCX document could not be read.") from exc
 
+    # Walk the document body once so paragraphs and tables retain their
+    # original interleaved order. Separate document.paragraphs/document.tables
+    # loops would move every table to the end of the extracted manuscript.
     parts: list[str] = []
-    for paragraph in document.paragraphs:
-        if paragraph.text.strip():
-            parts.append(paragraph.text)
-    for table in document.tables:
-        for row in table.rows:
-            cells = [cell.text.strip() for cell in row.cells]
-            if any(cells):
-                parts.append(" | ".join(cells))
+    for child in document.element.body.iterchildren():
+        if child.tag == qn("w:p"):
+            paragraph = Paragraph(child, document)
+            if paragraph.text.strip():
+                parts.append(paragraph.text)
+        elif child.tag == qn("w:tbl"):
+            table = Table(child, document)
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                if any(cells):
+                    parts.append(" | ".join(cells))
     extracted = "\n".join(parts).strip()
     if len(extracted) > MAX_EXTRACTED_CHARS:
         raise SubmissionValidationError("The extracted manuscript exceeds the 1-million-character processing limit.")
