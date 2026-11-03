@@ -214,6 +214,8 @@ def delete_submission(owner_sub: str, submission_id: str) -> None:
     if not item:
         raise SubmissionNotFoundError()
     s3.delete_object(Bucket=bucket, Key=item["object_key"])
+    if item.get("extracted_key"):
+        s3.delete_object(Bucket=bucket, Key=item["extracted_key"])
     table.delete_item(
         Key={"owner_sub": owner_sub, "submission_id": submission_id},
         ConditionExpression="attribute_exists(submission_id)",
