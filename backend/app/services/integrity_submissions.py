@@ -5,6 +5,7 @@ uses them when the corresponding environment variables are configured.
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -24,6 +25,7 @@ UPLOAD_URL_SECONDS = 300
 RETENTION_SECONDS = 24 * 60 * 60
 CLEANUP_BUFFER_SECONDS = 5 * 60
 CLEANUP_INDEX_NAME = "cleanup-index"
+logger = logging.getLogger(__name__)
 
 
 class SubmissionConfigurationError(RuntimeError):
@@ -326,13 +328,20 @@ def cleanup_expired_submissions(now_epoch: int | None = None, page_size: int = 1
                     update_args["ExpressionAttributeNames"] = names
                 table.update_item(**update_args)
                 cleaned += 1
-            except Exception:
+            except Exception as exc:
                 # Keep cleanup_status/cleanup_at intact for retry on the next run.
                 failed += 1
+                logger.warning("Integrity retention cleanup item failed (%s).", type(exc).__name__)
 
         last_key = response.get("LastEvaluatedKey")
         if not last_key:
             break
         query_args["ExclusiveStartKey"] = last_key
 
+    logger.info(
+        "Integrity retention cleanup finished: checked=%s cleaned=%s failed=%s",
+        checked,
+        cleaned,
+        failed,
+    )
     return {"checked": checked, "cleaned": cleaned, "failed": failed}
