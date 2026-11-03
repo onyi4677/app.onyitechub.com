@@ -114,7 +114,7 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
     doi_count = max(len(doi_values), len(bare_dois))
     doi_like = re.findall(r"10\.\d{3,}/[^\s]+", normalized, re.IGNORECASE)
     valid_doi_tokens = {value.rstrip(".,;)]}") for value in DOI_PATTERN.findall(normalized)}
-    for token in doi_like:
+    for token in doi_like[:10]:
         cleaned = token.rstrip(".,;)]}")
         if cleaned not in valid_doi_tokens:
             findings.append(_finding(
