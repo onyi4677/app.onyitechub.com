@@ -1,6 +1,6 @@
 # Standalone manuscript submission storage contract
 
-This stage adds the authenticated submission lifecycle only. It does not create AWS resources or enable assessment/model calls.
+This stage adds the authenticated submission lifecycle and the first frontend upload page. It does not create AWS resources or enable assessment/model calls.
 
 ## Required AWS resources (provision later, after review)
 
@@ -21,7 +21,11 @@ The feature remains unavailable and returns HTTP 503 until both resource variabl
 - `GET /api/integrity/submissions` and `GET /api/integrity/submissions/{id}`: owner-scoped metadata.
 - `DELETE /api/integrity/submissions/{id}`: deletes the owner's object and metadata.
 
-## S3 browser-upload CORS\n\nBefore enabling the bucket, configure S3 CORS to allow the production frontend origin `https://app.onyitechub.com` to use `POST` and expose no unnecessary headers. Add the exact Vercel preview origin only when testing a known preview; do not use wildcard origins. The browser sends the presigned form directly to S3 and does not send Cognito credentials to S3.\n\n## Limits and safeguards
+## S3 browser-upload CORS
+
+Configure S3 CORS with the exact production frontend origin `https://app.onyitechub.com`, allowed method `POST`, and allowed headers `*` for the browser multipart form. Add the exact Vercel preview origin only when testing a known preview; do not use wildcard origins. No response headers need to be exposed. The browser sends the presigned form directly to S3 and does not send Cognito credentials to S3.
+
+## Limits and safeguards
 
 - Only PDF and DOCX MIME/extension pairs are accepted.
 - Maximum declared and policy-enforced upload size: 15 MiB.
@@ -35,7 +39,7 @@ The feature remains unavailable and returns HTTP 503 until both resource variabl
 ## IAM permissions to add only after code review
 
 Lambda execution role will need narrowly scoped:
-- `s3:PutObject`, `s3:GetObject` (also covers `HeadObject`), and `s3:DeleteObject` are required on the dedicated object prefix. The Lambda role's `PutObject` permission is required for the presigned POST to authorize browser uploads.
+- `s3:PutObject`, `s3:GetObject` (also covers `HeadObject`), and `s3:DeleteObject` on the dedicated object prefix. The Lambda role's `PutObject` permission is required for the presigned POST to authorize browser uploads.
 - DynamoDB `PutItem`, `GetItem`, `Query`, `UpdateItem`, and `DeleteItem` on the dedicated table.
 
 Do not attach Lambda to a VPC or create NAT Gateway for this feature.
