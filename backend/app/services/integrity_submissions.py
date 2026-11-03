@@ -21,6 +21,9 @@ ALLOWED_TYPES = {
 }
 MAX_FILE_BYTES = 15 * 1024 * 1024
 UPLOAD_URL_SECONDS = 300
+RETENTION_SECONDS = 24 * 60 * 60
+CLEANUP_BUFFER_SECONDS = 5 * 60
+CLEANUP_INDEX_NAME = "cleanup-index"
 
 
 class SubmissionConfigurationError(RuntimeError):
@@ -31,12 +34,20 @@ class SubmissionNotFoundError(LookupError):
     pass
 
 
+class SubmissionExpiredError(RuntimeError):
+    pass
+
+
 class SubmissionValidationError(ValueError):
     pass
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _now_epoch() -> int:
+    return int(datetime.now(timezone.utc).timestamp())
 
 
 def _resources():
@@ -67,6 +78,19 @@ def validate_upload(file_name: str, content_type: str, size_bytes: int) -> str:
     return safe_name
 
 
+def _assert_within_retention_window(item: dict[str, Any]) -> None:
+    cleanup_at = item.get("cleanup_at")
+    if (
+        item.get("content_retention_status") == "expired"
+        or item.get("cleanup_status") != "pending"
+        or cleanup_at is None
+        or int(cleanup_at) <= _now_epoch()
+    ):
+        raise SubmissionExpiredError(
+            "The 24-hour manuscript processing window has ended. The saved assessment result, if any, remains available."
+        )
+
+
 def create_submission(
     owner_sub: str,
     file_name: str,
@@ -80,6 +104,9 @@ def create_submission(
     s3, table, bucket = _resources()
     submission_id = str(uuid4())
     now = _now()
+    now_epoch = _now_epoch()
+    expires_at = now_epoch + RETENTION_SECONDS
+    cleanup_at = expires_at - CLEANUP_BUFFER_SECONDS
     suffix = os.path.splitext(safe_name)[1].lower()
     object_key = f"submissions/{owner_sub}/{submission_id}/original{suffix}"
     item = {
@@ -92,6 +119,10 @@ def create_submission(
         "status": "pending_upload",
         "created_at": now,
         "updated_at": now,
+        "expires_at": expires_at,
+        "cleanup_status": "pending",
+        "cleanup_at": cleanup_at,
+        "content_retention_status": "available",
     }
     try:
         table.put_item(Item=item, ConditionExpression="attribute_not_exists(submission_id)")
@@ -120,6 +151,7 @@ def create_submission(
             "size_bytes": size_bytes,
             "status": "pending_upload",
             "created_at": now,
+            "expires_at": datetime.fromtimestamp(expires_at, timezone.utc).isoformat(),
         },
         "upload": post,
         "upload_expires_in_seconds": UPLOAD_URL_SECONDS,
@@ -138,6 +170,7 @@ def complete_submission(owner_sub: str, submission_id: str) -> dict[str, Any]:
     item = response.get("Item")
     if not item:
         raise SubmissionNotFoundError()
+    _assert_within_retention_window(item)
     if item.get("status") == "uploaded":
         return _public_submission(item)
     if item.get("status") != "pending_upload":
@@ -156,12 +189,19 @@ def complete_submission(owner_sub: str, submission_id: str) -> dict[str, Any]:
     if actual_type != item["content_type"]:
         raise SubmissionValidationError("The uploaded file type does not match the submission details.")
     now = _now()
+    now_epoch = _now_epoch()
     table.update_item(
         Key={"owner_sub": owner_sub, "submission_id": submission_id},
         UpdateExpression="SET #status = :status, updated_at = :updated",
-        ConditionExpression="#status = :pending",
+        ConditionExpression="#status = :pending AND cleanup_status = :cleanup_pending AND cleanup_at > :now",
         ExpressionAttributeNames={"#status": "status"},
-        ExpressionAttributeValues={":status": "uploaded", ":pending": "pending_upload", ":updated": now},
+        ExpressionAttributeValues={
+            ":status": "uploaded",
+            ":pending": "pending_upload",
+            ":cleanup_pending": "pending",
+            ":updated": now,
+            ":now": now_epoch,
+        },
     )
     item["status"] = "uploaded"
     item["updated_at"] = now
@@ -169,7 +209,7 @@ def complete_submission(owner_sub: str, submission_id: str) -> dict[str, Any]:
 
 
 def _public_submission(item: dict[str, Any]) -> dict[str, Any]:
-    return {
+    result = {
         "submission_id": item["submission_id"],
         "file_name": item["file_name"],
         "content_type": item["content_type"],
@@ -177,7 +217,11 @@ def _public_submission(item: dict[str, Any]) -> dict[str, Any]:
         "status": item["status"],
         "created_at": item["created_at"],
         "updated_at": item.get("updated_at", item["created_at"]),
+        "content_retention_status": item.get("content_retention_status", "available"),
     }
+    if item.get("expires_at") is not None:
+        result["expires_at"] = datetime.fromtimestamp(int(item["expires_at"]), timezone.utc).isoformat()
+    return result
 
 
 def list_submissions(owner_sub: str) -> list[dict[str, Any]]:
@@ -220,3 +264,65 @@ def delete_submission(owner_sub: str, submission_id: str) -> None:
         Key={"owner_sub": owner_sub, "submission_id": submission_id},
         ConditionExpression="attribute_exists(submission_id)",
     )
+
+
+def cleanup_expired_submissions(now_epoch: int | None = None, page_size: int = 100) -> dict[str, int]:
+    """Delete expired manuscript objects while retaining compact report records.
+
+    The GSI contains only records awaiting content cleanup. Failed S3 or
+    DynamoDB operations leave the item indexed so the next scheduled run retries.
+    """
+    s3, table, bucket = _resources()
+    current_time = int(now_epoch if now_epoch is not None else _now_epoch())
+    checked = cleaned = failed = 0
+    query_args: dict[str, Any] = {
+        "IndexName": CLEANUP_INDEX_NAME,
+        "KeyConditionExpression": Key("cleanup_status").eq("pending") & Key("cleanup_at").lte(current_time),
+        "Limit": page_size,
+    }
+
+    while True:
+        response = table.query(**query_args)
+        items = response.get("Items", [])
+        for item in items:
+            checked += 1
+            try:
+                if item.get("object_key"):
+                    s3.delete_object(Bucket=bucket, Key=item["object_key"])
+                if item.get("extracted_key"):
+                    s3.delete_object(Bucket=bucket, Key=item["extracted_key"])
+
+                values = {
+                    ":pending": "pending",
+                    ":now": current_time,
+                    ":expired": "expired",
+                }
+                names = {}
+                update_expression = (
+                    "SET content_retention_status = :expired, content_deleted_at = :now "
+                    "REMOVE cleanup_status, cleanup_at"
+                )
+                if item.get("status") != "extraction_completed":
+                    names["#status"] = "status"
+                    update_expression = (
+                        "SET #status = :expired, content_retention_status = :expired, content_deleted_at = :now "
+                        "REMOVE cleanup_status, cleanup_at"
+                    )
+                table.update_item(
+                    Key={"owner_sub": item["owner_sub"], "submission_id": item["submission_id"]},
+                    UpdateExpression=update_expression,
+                    ConditionExpression="cleanup_status = :pending AND cleanup_at <= :now",
+                    ExpressionAttributeNames=names or None,
+                    ExpressionAttributeValues=values,
+                )
+                cleaned += 1
+            except Exception:
+                # Keep cleanup_status/cleanup_at intact for retry on the next run.
+                failed += 1
+
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            break
+        query_args["ExclusiveStartKey"] = last_key
+
+    return {"checked": checked, "cleaned": cleaned, "failed": failed}
