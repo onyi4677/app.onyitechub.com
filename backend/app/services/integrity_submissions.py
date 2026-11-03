@@ -152,6 +152,7 @@ def create_submission(
             "status": "pending_upload",
             "created_at": now,
             "expires_at": datetime.fromtimestamp(expires_at, timezone.utc).isoformat(),
+            "content_retention_status": "available",
         },
         "upload": post,
         "upload_expires_in_seconds": UPLOAD_URL_SECONDS,
