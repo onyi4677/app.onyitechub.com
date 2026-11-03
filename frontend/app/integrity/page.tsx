@@ -5,10 +5,12 @@ import Nav from "../../components/nav";
 import {
   completeIntegritySubmission,
   createIntegritySubmission,
+  extractIntegritySubmission,
   deleteIntegritySubmission,
   listIntegritySubmissions,
   uploadIntegrityFile,
   type IntegritySubmission,
+  type IntegrityExtractionResult,
 } from "../../lib/api/integrity";
 
 const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -32,6 +34,8 @@ export default function ResearchIntegrityPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [checkingId, setCheckingId] = useState("");
+  const [reports, setReports] = useState<Record<string, IntegrityExtractionResult>>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -102,12 +106,29 @@ export default function ResearchIntegrityPage() {
 
     setFile(null);
     setPermissionConfirmed(false);
-    setNotice("Manuscript uploaded securely. Text extraction and assessment will be enabled in the next stage.");
+    setNotice("Manuscript uploaded securely. You can now run the initial deterministic document checks.");
     setUploading(false);
     try {
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "The upload succeeded, but the submission list could not be refreshed.");
+    }
+  }
+
+  async function handleExtract(submissionId: string) {
+    if (checkingId) return;
+    setCheckingId(submissionId);
+    setError("");
+    setNotice("");
+    try {
+      const result = await extractIntegritySubmission(submissionId);
+      setReports((current) => ({ ...current, [submissionId]: result }));
+      setSubmissions((current) => current.map((item) => item.submission_id === submissionId ? result.submission : item));
+      setNotice(result.already_processed ? "Loaded the saved deterministic check report." : "Text extraction and deterministic checks completed.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to extract and check this manuscript.");
+    } finally {
+      setCheckingId("");
     }
   }
 
@@ -119,6 +140,7 @@ export default function ResearchIntegrityPage() {
     try {
       await deleteIntegritySubmission(submissionId);
       setSubmissions((current) => current.filter((item) => item.submission_id !== submissionId));
+      setReports((current) => { const next = { ...current }; delete next[submissionId]; return next; });
       setNotice("Submission and stored manuscript deleted.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete this submission.");
@@ -140,8 +162,8 @@ export default function ResearchIntegrityPage() {
         </div>
 
         <div className="notice warning">
-          <strong>Current stage: secure submission</strong>
-          Upload and owner-scoped storage are being prepared. Text extraction, AI-assisted assessment, report generation and similarity comparison are not yet available.
+          <strong>Current stage: deterministic manuscript checks</strong>
+          Uploads are stored privately. You can extract readable text and run initial rule-based checks. AI-assisted assessment, similarity comparison and downloadable reports are not yet available.
         </div>
 
         <section className="card integrity-upload">
@@ -191,6 +213,27 @@ export default function ResearchIntegrityPage() {
                   <strong>{item.file_name}</strong>
                   <div className="muted">{formatSize(item.size_bytes)} · Uploaded {formatDate(item.created_at)}</div>
                   <div className="integrity-status">{item.status.replaceAll("_", " ")}</div>
+                  {(item.status === "uploaded" || item.status === "extraction_completed") && (
+                    <button className="button primary integrity-check-button" type="button" onClick={() => handleExtract(item.submission_id)} disabled={Boolean(checkingId) || Boolean(deletingId)}>
+                      {checkingId === item.submission_id ? "Checking manuscript..." : reports[item.submission_id] ? "Refresh checks" : item.status === "extraction_completed" ? "View saved checks" : "Run document checks"}
+                    </button>
+                  )}
+                  {reports[item.submission_id] && (
+                    <div className="integrity-report">
+                      <strong>Initial document report</strong>
+                      <p className="muted">{reports[item.submission_id].report.word_count.toLocaleString()} words · {reports[item.submission_id].report.detected_sections.length} detected sections · {reports[item.submission_id].report.findings.length} findings</p>
+                      {reports[item.submission_id].report.findings.map((finding, index) => (
+                        <div className="integrity-finding" key={finding.rule_id + index}>
+                          <strong>{finding.title}</strong>
+                          <span className="integrity-severity">{finding.severity}</span>
+                          <p>{finding.detail}</p>
+                          {finding.evidence && <blockquote>{finding.evidence}</blockquote>}
+                        </div>
+                      ))}
+                      {reports[item.submission_id].report.findings.length === 0 && <p>No deterministic flags were raised. This is not a certification of manuscript quality.</p>}
+                      <p className="muted">These checks are preliminary and require human review. They do not detect plagiarism or verify DOI registration.</p>
+                    </div>
+                  )}
                 </div>
                 <button
                   className="button"
