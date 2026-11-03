@@ -154,21 +154,37 @@ def extract_and_check_submission(owner_sub: str, submission_id: str) -> dict[str
         "sha256": content_sha256,
         "extracted_at": datetime.now(timezone.utc).isoformat(),
     }
-    table.update_item(
-        Key={"owner_sub": owner_sub, "submission_id": submission_id},
-        UpdateExpression="SET #status = :status, extracted_key = :text_key, extraction = :extraction, deterministic_report = :report, updated_at = :updated",
-        ConditionExpression="#status IN (:uploaded, :completed)",
-        ExpressionAttributeNames={"#status": "status"},
-        ExpressionAttributeValues={
-            ":status": "extraction_completed",
-            ":uploaded": "uploaded",
-            ":completed": "extraction_completed",
-            ":text_key": text_key,
-            ":extraction": extraction,
-            ":report": report,
-            ":updated": extraction["extracted_at"],
-        },
-    )
+    try:
+        table.update_item(
+            Key={"owner_sub": owner_sub, "submission_id": submission_id},
+            UpdateExpression="SET #status = :status, extracted_key = :text_key, extraction = :extraction, deterministic_report = :report, updated_at = :updated",
+            ConditionExpression="#status IN (:uploaded, :completed) AND cleanup_status = :cleanup_pending AND cleanup_at > :now",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":status": "extraction_completed",
+                ":uploaded": "uploaded",
+                ":completed": "extraction_completed",
+                ":cleanup_pending": "pending",
+                ":now": _now_epoch(),
+                ":text_key": text_key,
+                ":extraction": extraction,
+                ":report": report,
+                ":updated": extraction["extracted_at"],
+            },
+        )
+    except Exception as exc:
+        # A cleanup run may have started while extraction was in progress.
+        # Never leave a derived object behind when the conditional save fails.
+        try:
+            s3.delete_object(Bucket=bucket, Key=text_key)
+        except Exception:
+            pass
+        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+        if error_code == "ConditionalCheckFailedException":
+            raise SubmissionExpiredError(
+                "The manuscript processing window has ended. The saved assessment result, if any, remains available."
+            ) from exc
+        raise
     item["status"] = "extraction_completed"
     item["updated_at"] = extraction["extracted_at"]
     return {
