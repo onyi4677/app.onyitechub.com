@@ -106,8 +106,6 @@ def extract_and_check_submission(owner_sub: str, submission_id: str) -> dict[str
     item = response.get("Item")
     if not item:
         raise SubmissionNotFoundError()
-    if item.get("status") not in {"uploaded", "extraction_completed"}:
-        raise SubmissionValidationError("Upload the manuscript successfully before extracting its text.")
     if item.get("status") == "extraction_completed" and item.get("deterministic_report"):
         return {
             "submission": _public_submission(item),
@@ -116,6 +114,8 @@ def extract_and_check_submission(owner_sub: str, submission_id: str) -> dict[str
             "already_processed": True,
         }
     _assert_within_retention_window(item)
+    if item.get("status") not in {"uploaded", "extraction_completed"}:
+        raise SubmissionValidationError("Upload the manuscript successfully before extracting its text.")
 
     try:
         obj = s3.get_object(Bucket=bucket, Key=item["object_key"])
