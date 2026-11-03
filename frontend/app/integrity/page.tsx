@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Nav from "../../components/nav";
 import {
   completeIntegritySubmission,
@@ -68,7 +68,7 @@ export default function ResearchIntegrityPage() {
     setFile(nextFile);
   }
 
-  async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
+  async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file || !permissionConfirmed || uploading) return;
 
@@ -87,10 +87,6 @@ export default function ResearchIntegrityPage() {
       submissionId = created.submission.submission_id;
       await uploadIntegrityFile(created.upload, file);
       await completeIntegritySubmission(submissionId);
-      setFile(null);
-      setPermissionConfirmed(false);
-      setNotice("Manuscript uploaded securely. Text extraction and assessment will be enabled in the next stage.");
-      await refresh();
     } catch (err) {
       if (submissionId) {
         try {
@@ -100,8 +96,18 @@ export default function ResearchIntegrityPage() {
         }
       }
       setError(err instanceof Error ? err.message : "The manuscript could not be uploaded.");
-    } finally {
       setUploading(false);
+      return;
+    }
+
+    setFile(null);
+    setPermissionConfirmed(false);
+    setNotice("Manuscript uploaded securely. Text extraction and assessment will be enabled in the next stage.");
+    setUploading(false);
+    try {
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The upload succeeded, but the submission list could not be refreshed.");
     }
   }
 
