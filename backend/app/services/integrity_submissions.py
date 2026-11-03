@@ -12,6 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 import boto3
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 ALLOWED_TYPES = {
@@ -182,7 +183,7 @@ def _public_submission(item: dict[str, Any]) -> dict[str, Any]:
 def list_submissions(owner_sub: str) -> list[dict[str, Any]]:
     _, table, _ = _resources()
     response = table.query(
-        KeyConditionExpression=boto3.dynamodb.conditions.Key("owner_sub").eq(owner_sub),
+        KeyConditionExpression=Key("owner_sub").eq(owner_sub),
         ScanIndexForward=False,
     )
     items = response.get("Items", [])
