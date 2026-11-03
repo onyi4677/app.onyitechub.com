@@ -308,13 +308,15 @@ def cleanup_expired_submissions(now_epoch: int | None = None, page_size: int = 1
                         "SET #status = :expired, content_retention_status = :expired, content_deleted_at = :now "
                         "REMOVE cleanup_status, cleanup_at"
                     )
-                table.update_item(
-                    Key={"owner_sub": item["owner_sub"], "submission_id": item["submission_id"]},
-                    UpdateExpression=update_expression,
-                    ConditionExpression="cleanup_status = :pending AND cleanup_at <= :now",
-                    ExpressionAttributeNames=names or None,
-                    ExpressionAttributeValues=values,
-                )
+                update_args = {
+                    "Key": {"owner_sub": item["owner_sub"], "submission_id": item["submission_id"]},
+                    "UpdateExpression": update_expression,
+                    "ConditionExpression": "cleanup_status = :pending AND cleanup_at <= :now",
+                    "ExpressionAttributeValues": values,
+                }
+                if names:
+                    update_args["ExpressionAttributeNames"] = names
+                table.update_item(**update_args)
                 cleaned += 1
             except Exception:
                 # Keep cleanup_status/cleanup_at intact for retry on the next run.
