@@ -5,7 +5,7 @@ export type IntegritySubmission = {
   file_name: string;
   content_type: string;
   size_bytes: number;
-  status: "pending_upload" | "uploaded" | "assessing" | "completed" | "failed";
+  status: "pending_upload" | "uploaded" | "extraction_completed" | "assessing" | "completed" | "failed";
   created_at: string;
   updated_at: string;
 };
@@ -59,5 +59,44 @@ export async function deleteIntegritySubmission(submissionId: string) {
   return apiRequest<void>(
     `/api/integrity/submissions/${encodeURIComponent(submissionId)}`,
     { method: "DELETE" }
+  );
+}
+
+export type IntegrityFinding = {
+  rule_id: string;
+  severity: "critical" | "major" | "minor" | "info";
+  title: string;
+  detail: string;
+  source: "deterministic";
+  requires_human_verification: boolean;
+  evidence?: string;
+};
+
+export type IntegrityExtractionResult = {
+  submission: IntegritySubmission;
+  report: {
+    status: string;
+    word_count: number;
+    character_count: number;
+    detected_sections: string[];
+    citation_pattern_count?: number;
+    doi_pattern_count?: number;
+    findings: IntegrityFinding[];
+    limitations: string[];
+  };
+  extraction: {
+    status: string;
+    word_count: number;
+    character_count: number;
+    sha256: string;
+    extracted_at: string;
+  };
+  already_processed: boolean;
+};
+
+export async function extractIntegritySubmission(submissionId: string) {
+  return apiRequest<IntegrityExtractionResult>(
+    `/api/integrity/submissions/${encodeURIComponent(submissionId)}/extract`,
+    { method: "POST" }
   );
 }
