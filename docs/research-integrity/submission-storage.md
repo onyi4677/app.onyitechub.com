@@ -44,7 +44,7 @@ Configure S3 CORS with the exact production frontend origin `https://app.onyitec
 - **Automated cleanup:** the existing API Lambda dispatches a dedicated EventBridge scheduled event every minute. It queries only pending cleanup records through the `cleanup-index` GSI, deletes the original S3 object and derived extracted-text object, then removes the cleanup-index keys while retaining the DynamoDB report and metadata. Abandoned uploads are included because their records enter the cleanup index when created.
 - **Retry behavior:** if either S3 deletion or the DynamoDB completion update fails, the cleanup-index keys remain, so the next scheduled invocation retries. Deleting S3 objects is idempotent. The extraction save uses a conditional update against the cleanup state; if cleanup wins a race, the newly written extracted object is deleted rather than orphaned.
 - **Timing caveat:** EventBridge and Lambda are managed asynchronous services, so invocation and deletion are not a hard real-time guarantee to the exact second. The five-minute safety buffer is intended to complete deletion before the 24-hour expiry. Monitor scheduled invocations and cleanup failures before external launch.
-- **Required DynamoDB index:** add a GSI named `cleanup-index` with partition key `cleanup_status` (String), sort key `cleanup_at` (Number), and `ALL` projection. The index contains only submissions awaiting cleanup; successful cleanup removes both index-key attributes while preserving the report record.
+- **Required DynamoDB index:** add a GSI named `cleanup-index` with partition key `cleanup_status` (String), sort key `cleanup_at` (Number), and an `INCLUDE` projection containing only `object_key`, `extracted_key`, and `status` (the table keys and index keys are included automatically). This avoids copying report data into the index. The index contains only submissions awaiting cleanup; successful cleanup removes both index-key attributes while preserving the report record.
 - **Required schedule:** deploy `infra/research-integrity-cleanup-schedule.yaml` as a separate CloudFormation stack after the updated Lambda code is deployed. It invokes the existing `onyitech-research-api` function every minute. Do not create a second API Lambda.
 - Verify that expired originals and extracted-text objects are absent from S3 while the report and submission history remain readable in the frontend before external launch.
 
@@ -53,6 +53,7 @@ Configure S3 CORS with the exact production frontend origin `https://app.onyitec
 Lambda execution role will need narrowly scoped:
 - `s3:PutObject`, `s3:GetObject` (also covers `HeadObject`), and `s3:DeleteObject` on the dedicated object prefix. These cover presigned upload authorization, reading originals, writing derived extracted text, and deleting both objects.
 - DynamoDB `PutItem`, `GetItem`, `Query`, `UpdateItem`, and `DeleteItem` on the dedicated table.
+- In addition, grant `dynamodb:Query` on the dedicated GSI ARN `arn:aws:dynamodb:us-east-1:530751149539:table/onyitech-integrity-submissions/index/cleanup-index`. Querying a GSI requires the index ARN in the IAM resource list; table-only Query permission is insufficient.
 
 Do not attach Lambda to a VPC or create NAT Gateway for this feature.
 
@@ -65,7 +66,7 @@ The existing table is on-demand. Add the cleanup GSI once before enabling the sc
 aws dynamodb update-table \
   --table-name onyitech-integrity-submissions \
   --attribute-definitions AttributeName=cleanup_status,AttributeType=S AttributeName=cleanup_at,AttributeType=N \
-  --global-secondary-index-updates '[{"Create":{"IndexName":"cleanup-index","KeySchema":[{"AttributeName":"cleanup_status","KeyType":"HASH"},{"AttributeName":"cleanup_at","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}}}]' \
+  --global-secondary-index-updates '[{"Create":{"IndexName":"cleanup-index","KeySchema":[{"AttributeName":"cleanup_status","KeyType":"HASH"},{"AttributeName":"cleanup_at","KeyType":"RANGE"}],"Projection":{"ProjectionType":"INCLUDE","NonKeyAttributes":["object_key","extracted_key","status"]}}}]' \
   --no-cli-pager
 ```
 
@@ -77,7 +78,6 @@ Deploy the schedule stack only after the updated Lambda package is deployed:
 aws cloudformation deploy \
   --template-file infra/research-integrity-cleanup-schedule.yaml \
   --stack-name onyitech-research-integrity-cleanup-schedule \
-  --capabilities CAPABILITY_NAMED_IAM \
   --no-cli-pager
 ```
 
