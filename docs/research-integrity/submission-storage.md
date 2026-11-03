@@ -21,6 +21,7 @@ The feature remains unavailable and returns HTTP 503 until both resource variabl
 - `GET /api/integrity/submissions` and `GET /api/integrity/submissions/{id}`: owner-scoped metadata.
 - `POST /api/integrity/submissions/{id}/extract`: downloads the owner's uploaded file inside the backend, validates the PDF/DOCX container, extracts text, stores extracted text as a private S3 object, and saves a compact deterministic report in the owner's DynamoDB record. Repeated requests return the saved report.
 - `DELETE /api/integrity/submissions/{id}`: deletes the original object, derived extracted text (if present), and metadata.
+- The API returns HTTP 410 when a new upload-completion or extraction transaction is attempted after the processing window has closed. A previously saved deterministic report remains readable and repeat extraction returns that saved report without needing the manuscript.
 
 ## S3 browser-upload CORS
 
@@ -38,9 +39,14 @@ Configure S3 CORS with the exact production frontend origin `https://app.onyitec
 - Password-protected PDFs, scanned-PDF OCR, images embedded in DOCX, and alternative document formats are not supported in this stage. A scan without a text layer produces a no-readable-text result.
 - Extracted text is stored only in private S3; DynamoDB stores a compact report and extraction metadata, not the full manuscript text.
 - Deleting a submission also deletes its derived extracted-text object.
-- **24-hour transaction retention policy:** the original manuscript and derived extracted-text object are temporary processing data. They must be deleted no later than 24 hours after the submission transaction begins (the successful upload/creation timestamp recorded for the submission). The researcher or editor must complete the review transaction within that window.
-- **Retain the result:** keep the compact deterministic report and the minimum submission metadata in DynamoDB so the frontend can continue displaying the result and submission history after the manuscript content has expired. Do not retain the full manuscript or extracted text in the report record.
-- **Cleanup requirement (not yet implemented):** an automated cleanup process must use the submission's explicit expiry timestamp and delete the original and derived S3 objects by the 24-hour deadline, including abandoned or incomplete uploads. It must leave the compact report and display metadata intact. A one-day S3 lifecycle rule alone is not an exact 24-hour guarantee. Verify cleanup and frontend result display after expiry before external launch.
+- **24-hour transaction retention policy:** each submission records an absolute `expires_at` timestamp 24 hours after creation. The `cleanup_at` timestamp is set five minutes earlier as a safety buffer for the one-minute scheduled cleanup interval. The researcher or editor must finish the assessment within this processing window; new completion/extraction operations are rejected once cleanup becomes due.
+- **Retain the result:** keep the compact deterministic report and minimum submission metadata in DynamoDB so the frontend can continue displaying the result and submission history after manuscript content expires. Do not retain the full manuscript or extracted text in the report record.
+- **Automated cleanup:** the existing API Lambda dispatches a dedicated EventBridge scheduled event every minute. It queries only pending cleanup records through the `cleanup-index` GSI, deletes the original S3 object and derived extracted-text object, then removes the cleanup-index keys while retaining the DynamoDB report and metadata. Abandoned uploads are included because their records enter the cleanup index when created.
+- **Retry behavior:** if either S3 deletion or the DynamoDB completion update fails, the cleanup-index keys remain, so the next scheduled invocation retries. Deleting S3 objects is idempotent. The extraction save uses a conditional update against the cleanup state; if cleanup wins a race, the newly written extracted object is deleted rather than orphaned.
+- **Timing caveat:** EventBridge and Lambda are managed asynchronous services, so invocation and deletion are not a hard real-time guarantee to the exact second. The five-minute safety buffer is intended to complete deletion before the 24-hour expiry. Monitor scheduled invocations and cleanup failures before external launch.
+- **Required DynamoDB index:** add a GSI named `cleanup-index` with partition key `cleanup_status` (String), sort key `cleanup_at` (Number), and `ALL` projection. The index contains only submissions awaiting cleanup; successful cleanup removes both index-key attributes while preserving the report record.
+- **Required schedule:** deploy `infra/research-integrity-cleanup-schedule.yaml` as a separate CloudFormation stack after the updated Lambda code is deployed. It invokes the existing `onyitech-research-api` function every minute. Do not create a second API Lambda.
+- Verify that expired originals and extracted-text objects are absent from S3 while the report and submission history remain readable in the frontend before external launch.
 
 ## IAM permissions to add only after code review
 
@@ -49,3 +55,30 @@ Lambda execution role will need narrowly scoped:
 - DynamoDB `PutItem`, `GetItem`, `Query`, `UpdateItem`, and `DeleteItem` on the dedicated table.
 
 Do not attach Lambda to a VPC or create NAT Gateway for this feature.
+
+
+## Provisioning the cleanup index
+
+The existing table is on-demand. Add the cleanup GSI once before enabling the scheduled rule:
+
+```bash
+aws dynamodb update-table \
+  --table-name onyitech-integrity-submissions \
+  --attribute-definitions AttributeName=cleanup_status,AttributeType=S AttributeName=cleanup_at,AttributeType=N \
+  --global-secondary-index-updates '[{"Create":{"IndexName":"cleanup-index","KeySchema":[{"AttributeName":"cleanup_status","KeyType":"HASH"},{"AttributeName":"cleanup_at","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}}}]' \
+  --no-cli-pager
+```
+
+Wait until the table and the new GSI report `ACTIVE` before deploying the cleanup schedule. The index update adds a small on-demand index storage/write cost; it avoids repeatedly scanning every retained report record.
+
+Deploy the schedule stack only after the updated Lambda package is deployed:
+
+```bash
+aws cloudformation deploy \
+  --template-file infra/research-integrity-cleanup-schedule.yaml \
+  --stack-name onyitech-research-integrity-cleanup-schedule \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --no-cli-pager
+```
+
+The template adds only the one-minute EventBridge rule and permission for that rule to invoke the existing Lambda. It does not create another Lambda, bucket, or DynamoDB table.
