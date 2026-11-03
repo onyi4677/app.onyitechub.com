@@ -94,12 +94,23 @@ def _classify_document_type(lines: list[str], detected: list[str]) -> dict[str, 
             "basis": basis,
         }
 
-    if "methods" in detected and ("results" in detected or "findings" in detected):
+    explicit_empirical_title = re.search(
+        r"\\b(?:research article|original research|empirical study|empirical research)\\b",
+        opening_text,
+    )
+    if (
+        ("methods" in detected and ("results" in detected or "findings" in detected))
+        or (explicit_empirical_title and ("results" in detected or "findings" in detected))
+    ):
         return {
             "key": "empirical_research",
             "label": "Empirical research article",
-            "confidence": "medium",
-            "basis": "Both a recognised Methods/Methodology heading and a Results/Findings heading were detected.",
+            "confidence": "high" if explicit_empirical_title else "medium",
+            "basis": (
+                "The opening text identifies an empirical/research article and a Results/Findings heading was detected."
+                if explicit_empirical_title
+                else "Both a recognised Methods/Methodology heading and a Results/Findings heading were detected."
+            ),
         }
 
     return {
