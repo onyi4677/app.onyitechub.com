@@ -28,8 +28,8 @@ DOI_PATTERN = re.compile(r"10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.IGNORECASE)
 URL_DOI_PATTERN = re.compile(r"https?://(?:dx\.)?doi\.org/[^\s)]+", re.IGNORECASE)
 IN_TEXT_AUTHOR_YEAR = re.compile(r"\([A-Z][A-Za-z'’-]+(?:\s+et\s+al\.)?,?\s*[,;]?\s*(?:19|20)\d{2}[a-z]?\)")
 PLACEHOLDER_PATTERN = re.compile(
-    r"\b(?:insert\s+(?:text|reference|citation)|to\s+be\s+completed|"
-    r"lorem\s+ipsum|xxx+|\[\s*(?:citation|reference|insert|author)\s*\])\b",
+    r"\b(?:insert\s+(?:text|reference|citation)|to\s+be\s+completed|lorem\s+ipsum|xxx+)\b"
+    r"|\[\s*(?:citation|reference|insert|author)\s*\]",
     re.IGNORECASE,
 )
 
