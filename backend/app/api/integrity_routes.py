@@ -8,6 +8,7 @@ from app.auth import require_user
 from app.services.integrity_extraction import extract_and_check_submission
 from app.services.integrity_submissions import (
     SubmissionConfigurationError,
+    SubmissionExpiredError,
     SubmissionNotFoundError,
     SubmissionValidationError,
     complete_submission,
@@ -30,6 +31,8 @@ class SubmissionCreateRequest(BaseModel):
 def _handle_error(exc: Exception) -> None:
     if isinstance(exc, SubmissionNotFoundError):
         raise HTTPException(status_code=404, detail="Submission not found") from exc
+    if isinstance(exc, SubmissionExpiredError):
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
     if isinstance(exc, SubmissionValidationError):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if isinstance(exc, SubmissionConfigurationError):
