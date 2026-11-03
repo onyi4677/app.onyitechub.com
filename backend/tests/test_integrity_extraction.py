@@ -75,6 +75,22 @@ class ManuscriptExtractionTests(unittest.TestCase):
         self.assertIn("A sample manuscript abstract.", text)
         self.assertIn("A cross-sectional survey was conducted.", text)
 
+    def test_preserves_table_position_between_paragraphs(self):
+        document = Document()
+        document.add_paragraph("Before the table.")
+        table = document.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = "Table value A"
+        table.cell(0, 1).text = "Table value B"
+        document.add_paragraph("After the table.")
+        buffer = io.BytesIO()
+        document.save(buffer)
+
+        text = _extract_docx(buffer.getvalue())
+
+        self.assertLess(text.index("Before the table."), text.index("Table value A"))
+        self.assertLess(text.index("Table value A"), text.index("After the table."))
+        self.assertIn("Table value A | Table value B", text)
+
     def test_rejects_invalid_docx_archive(self):
         with self.assertRaises(SubmissionValidationError):
             _extract_docx(b"not a docx")
