@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/study-screening-clean-main
+      - feat/research-integrity-standalone-mvp
     paths:
       - "backend/**"
       - ".github/workflows/backend-tests.yml"
