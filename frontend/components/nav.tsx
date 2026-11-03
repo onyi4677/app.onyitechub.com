@@ -21,6 +21,7 @@ export default function Nav() {
       <Link href="/dashboard">Dashboard</Link>
       <Link href="/projects/new">New project</Link>
       <Link href="/analyze">Analyze</Link>
+      <Link href="/integrity">Integrity review</Link>
       {authenticated && <button className="button" type="button" onClick={signOut}>Sign out</button>}
     </div>
   </nav>;
