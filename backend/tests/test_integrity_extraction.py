@@ -46,12 +46,16 @@ class FakeS3:
     def __init__(self, payload):
         self.payload = payload
         self.puts = []
+        self.deleted = []
 
     def get_object(self, **kwargs):
         return {"Body": FakeBody(self.payload)}
 
     def put_object(self, **kwargs):
         self.puts.append(kwargs)
+
+    def delete_object(self, **kwargs):
+        self.deleted.append(kwargs)
 
 
 def make_docx():
@@ -178,6 +182,8 @@ class ManuscriptExtractionTests(unittest.TestCase):
             "expected_size_bytes": 100,
             "object_key": "submissions/user-a/submission-retained/original.pdf",
             "status": "extraction_completed",
+            "created_at": "2026-11-03T10:00:00+00:00",
+            "updated_at": "2026-11-03T10:01:00+00:00",
             "deterministic_report": report,
             "extraction": {"status": "text_extracted"},
             "content_retention_status": "expired",
