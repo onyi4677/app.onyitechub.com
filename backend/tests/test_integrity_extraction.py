@@ -158,7 +158,8 @@ class ManuscriptExtractionTests(unittest.TestCase):
         item = {
             "owner_sub": "user-a",
             "submission_id": "submission-expired",
-            "status": "uploaded",
+            "status": "expired",
+            "content_retention_status": "expired",
             "cleanup_status": "pending",
             "cleanup_at": 100,
             "expires_at": 400,
