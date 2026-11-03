@@ -52,7 +52,7 @@ Text.
 References
 {duplicate}
 {duplicate}
-Please insert citation here.
+Please insert citation here.\n[INSERT AUTHOR]
 """
         result = run_deterministic_checks(text)
         rule_ids = {finding["rule_id"] for finding in result["findings"]}
