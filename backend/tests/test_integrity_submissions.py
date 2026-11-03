@@ -142,6 +142,7 @@ class IntegritySubmissionValidationTests(unittest.TestCase):
             "content_type": "application/pdf",
             "expected_size_bytes": 1024,
             "object_key": "submissions/user-a/submission-1/original.pdf",
+            "extracted_key": "submissions/user-a/submission-1/derived/extracted.txt",
             "status": "uploaded",
             "created_at": "2026-11-03T10:00:00+00:00",
         }
@@ -151,6 +152,7 @@ class IntegritySubmissionValidationTests(unittest.TestCase):
             delete_submission("user-a", "submission-1")
 
         self.assertEqual(s3.deleted[0]["Key"], item["object_key"])
+        self.assertEqual(s3.deleted[1]["Key"], item["extracted_key"])
         self.assertEqual(table.delete_calls[0]["Key"]["owner_sub"], "user-a")
 
 
