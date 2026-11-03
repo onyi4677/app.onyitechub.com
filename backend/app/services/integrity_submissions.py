@@ -190,19 +190,26 @@ def complete_submission(owner_sub: str, submission_id: str) -> dict[str, Any]:
         raise SubmissionValidationError("The uploaded file type does not match the submission details.")
     now = _now()
     now_epoch = _now_epoch()
-    table.update_item(
-        Key={"owner_sub": owner_sub, "submission_id": submission_id},
-        UpdateExpression="SET #status = :status, updated_at = :updated",
-        ConditionExpression="#status = :pending AND cleanup_status = :cleanup_pending AND cleanup_at > :now",
-        ExpressionAttributeNames={"#status": "status"},
-        ExpressionAttributeValues={
-            ":status": "uploaded",
-            ":pending": "pending_upload",
-            ":cleanup_pending": "pending",
-            ":updated": now,
-            ":now": now_epoch,
-        },
-    )
+    try:
+        table.update_item(
+            Key={"owner_sub": owner_sub, "submission_id": submission_id},
+            UpdateExpression="SET #status = :status, updated_at = :updated",
+            ConditionExpression="#status = :pending AND cleanup_status = :cleanup_pending AND cleanup_at > :now",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":status": "uploaded",
+                ":pending": "pending_upload",
+                ":cleanup_pending": "pending",
+                ":updated": now,
+                ":now": now_epoch,
+            },
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            raise SubmissionExpiredError(
+                "The manuscript processing window has ended. Please start a new submission."
+            ) from exc
+        raise
     item["status"] = "uploaded"
     item["updated_at"] = now
     return _public_submission(item)
