@@ -118,7 +118,7 @@ class IntegritySubmissionValidationTests(unittest.TestCase):
         self.assertEqual(item["status"], "pending_upload")
         self.assertEqual(item["cleanup_status"], "pending")
         self.assertEqual(item["expires_at"] - item["cleanup_at"], 300)
-        self.assertEqual(result["submission"]["content_retention_status"] if "content_retention_status" in result["submission"] else "available", "available")
+        self.assertEqual(result["submission"]["content_retention_status"], "available")
         self.assertTrue(item["object_key"].startswith("submissions/user-a/"))
         self.assertEqual(result["upload_expires_in_seconds"], 300)
         self.assertIn(["content-length-range", 1, MAX_FILE_BYTES], s3.presign_args["Conditions"])
