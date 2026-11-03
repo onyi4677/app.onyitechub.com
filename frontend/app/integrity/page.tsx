@@ -222,6 +222,16 @@ export default function ResearchIntegrityPage() {
                     <div className="integrity-report">
                       <strong>Initial document report</strong>
                       <p className="muted">{reports[item.submission_id].report.word_count.toLocaleString()} words · {reports[item.submission_id].report.detected_sections.length} detected sections · {reports[item.submission_id].report.findings.length} findings</p>
+                      {reports[item.submission_id].report.document_type && (
+                        <div className="integrity-classification">
+                          <strong>Detected document type: {reports[item.submission_id].report.document_type.label}</strong>
+                          <p className="muted">Classification confidence: {reports[item.submission_id].report.document_type.confidence}. This is an automated, rule-based classification and should be confirmed by a human reviewer.</p>
+                          <p>{reports[item.submission_id].report.document_type.basis}</p>
+                        </div>
+                      )}
+                      {reports[item.submission_id].report.assessment_notes?.map((note, index) => (
+                        <p className="muted" key={`assessment-note-${index}`}>{note}</p>
+                      ))}
                       {reports[item.submission_id].report.findings.map((finding, index) => (
                         <div className="integrity-finding" key={finding.rule_id + index}>
                           <strong>{finding.title}</strong>
