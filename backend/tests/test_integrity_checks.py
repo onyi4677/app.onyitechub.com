@@ -38,8 +38,106 @@ Smith, J. (2021). Example title. Journal.
         self.assertIn("abstract", result["detected_sections"])
         self.assertIn("methods", result["detected_sections"])
         self.assertIn("references", result["detected_sections"])
+        self.assertEqual(result["document_type"]["key"], "empirical_research")
         self.assertGreater(result["word_count"], 20)
         self.assertEqual(result["citation_pattern_count"], 1)
+
+    def test_review_paper_is_not_penalised_for_missing_methods_heading(self):
+        text = """Sex and Romantic Relationships Among In-School Adolescents:
+Implications for Counselling Psychology
+
+Abstract
+This paper reviews conceptual and empirical literature.
+
+Introduction
+Adolescent relationships are discussed.
+
+Conceptual Review
+The literature is examined thematically.
+
+Discussion
+The evidence is considered.
+
+Counselling Implications
+Implications for practice are discussed.
+
+Conclusion
+The paper concludes.
+
+References
+A sample reference entry with enough words.
+"""
+        result = run_deterministic_checks(text)
+        self.assertEqual(result["document_type"]["key"], "review_paper")
+        self.assertNotIn(
+            "structure.methods_not_detected",
+            {finding["rule_id"] for finding in result["findings"]},
+        )
+        self.assertTrue(any("Methods heading was not required" in note for note in result["assessment_notes"]))
+
+    def test_explicit_seminar_paper_is_not_penalised_for_missing_methods_heading(self):
+        text = """Seminar Paper: Adolescent Development
+
+Abstract
+A seminar paper.
+
+Introduction
+Topic overview.
+
+Discussion
+Discussion of the topic.
+
+Conclusion
+Summary.
+
+References
+A sample reference entry with enough words.
+"""
+        result = run_deterministic_checks(text)
+        self.assertEqual(result["document_type"]["key"], "seminar_paper")
+        self.assertNotIn(
+            "structure.methods_not_detected",
+            {finding["rule_id"] for finding in result["findings"]},
+        )
+
+    def test_uncertain_document_type_does_not_receive_major_methods_finding(self):
+        text = """A paper about an important topic.
+
+Introduction
+Some discussion.
+
+References
+A sample reference entry with enough words.
+"""
+        result = run_deterministic_checks(text)
+        self.assertEqual(result["document_type"]["key"], "unknown")
+        self.assertNotIn(
+            "structure.methods_not_detected",
+            {finding["rule_id"] for finding in result["findings"]},
+        )
+
+    def test_explicit_empirical_article_without_methods_receives_methods_finding(self):
+        text = """Research Article: A Study of Student Outcomes
+
+Abstract
+The study examined student outcomes.
+
+Introduction
+Background.
+
+Results
+Findings are presented.
+
+References
+A sample reference entry with enough words.
+"""
+        result = run_deterministic_checks(text)
+        self.assertEqual(result["document_type"]["key"], "empirical_research")
+        methods_finding = next(
+            finding for finding in result["findings"]
+            if finding["rule_id"] == "structure.methods_not_detected"
+        )
+        self.assertEqual(methods_finding["severity"], "major")
 
     def test_flags_placeholder_and_duplicate_reference_line(self):
         duplicate = "Smith, J. (2021). Example reference title. Journal."
@@ -52,7 +150,8 @@ Text.
 References
 {duplicate}
 {duplicate}
-Please insert citation here.\n[INSERT AUTHOR]
+Please insert citation here.
+[INSERT AUTHOR]
 """
         result = run_deterministic_checks(text)
         rule_ids = {finding["rule_id"] for finding in result["findings"]}
