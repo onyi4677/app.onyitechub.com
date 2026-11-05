@@ -54,6 +54,70 @@ def _finding(
     return item
 
 
+def _classify_document_type(lines: list[str], detected: list[str]) -> dict[str, str]:
+    """Classify only when visible title/heading evidence supports a category.
+
+    This is a transparent heuristic, not an AI judgment. Unknown is safer than
+    imposing empirical-article requirements on a document of unclear type.
+    """
+    opening_text = " ".join(lines[:8]).lower()
+    heading_text = " ".join(
+        line.lower() for line in lines
+        if len(line.split()) <= 8
+    )
+
+    if re.search(r"\bseminar\s+(?:paper|report)\b", opening_text):
+        return {
+            "key": "seminar_paper",
+            "label": "Seminar paper",
+            "confidence": "high",
+            "basis": "The opening title/text explicitly identifies a seminar paper or seminar report.",
+        }
+
+    review_heading = re.search(
+        r"\b(?:conceptual|systematic|scoping|narrative|integrative|literature|critical|rapid|umbrella|bibliometric)\s+review\b"
+        r"|\breview\s+of\s+literature\b",
+        heading_text,
+    )
+    review_title = re.search(
+        r"\b(?:systematic|scoping|narrative|integrative|literature|critical|rapid|umbrella|bibliometric)\s+review\b",
+        opening_text,
+    )
+    if review_heading or review_title:
+        return {
+            "key": "review_paper",
+            "label": "Review / conceptual paper",
+            "confidence": "high" if review_heading else "medium",
+            "basis": "A review-type title or section heading was detected.",
+        }
+
+    explicit_empirical_title = re.search(
+        r"\b(?:research article|original research|empirical study|empirical research)\b",
+        opening_text,
+    )
+    if (
+        ("methods" in detected and ("results" in detected or "findings" in detected))
+        or (explicit_empirical_title and ("results" in detected or "findings" in detected))
+    ):
+        return {
+            "key": "empirical_research",
+            "label": "Empirical research article",
+            "confidence": "high" if explicit_empirical_title else "medium",
+            "basis": (
+                "The opening text identifies an empirical/research article and a Results/Findings heading was detected."
+                if explicit_empirical_title
+                else "Both a recognised Methods/Methodology heading and a Results/Findings heading were detected."
+            ),
+        }
+
+    return {
+        "key": "unknown",
+        "label": "Document type not determined",
+        "confidence": "low",
+        "basis": "The opening text and recognised headings do not provide enough evidence for a reliable document-type classification.",
+    }
+
+
 def run_deterministic_checks(text: str) -> dict[str, Any]:
     """Return bounded document metrics and transparent rule-based findings."""
     if not isinstance(text, str) or not text.strip():
@@ -62,6 +126,12 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
             "word_count": 0,
             "character_count": 0,
             "detected_sections": [],
+            "document_type": {
+                "key": "unknown",
+                "label": "Document type not determined",
+                "confidence": "low",
+                "basis": "No readable text was available for classification.",
+            },
             "findings": [
                 _finding(
                     "document.empty_extraction",
@@ -70,6 +140,7 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
                     "The uploaded file produced no readable text. A text-readable DOCX/PDF or OCR is required before assessment.",
                 )
             ],
+            "assessment_notes": [],
         }
 
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -80,17 +151,33 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
         if any(re.match(pattern, line, re.IGNORECASE) for pattern in patterns for line in lines):
             detected.append(section)
 
+    document_type = _classify_document_type(lines, detected)
     findings: list[dict[str, Any]] = []
+    assessment_notes: list[str] = [
+        "Document-type classification is heuristic and should be confirmed by a human reviewer."
+    ]
+
     if "abstract" not in detected:
         findings.append(_finding(
             "structure.abstract_not_detected", "minor", "Abstract heading not detected",
             "No standalone Abstract heading was detected. Confirm whether the manuscript type requires an abstract or uses another heading.",
         ))
+
     if "methods" not in detected:
-        findings.append(_finding(
-            "structure.methods_not_detected", "major", "Methods section not detected",
-            "No conventional Methods/Methodology heading was detected. Check whether the study design and methods are reported under another heading.",
-        ))
+        if document_type["key"] == "empirical_research":
+            findings.append(_finding(
+                "structure.methods_not_detected", "major", "Methods section not detected",
+                "This document was classified as an empirical research article, but no conventional Methods/Methodology heading was detected. Check whether the study design and methods are reported under another heading.",
+            ))
+        elif document_type["key"] in {"review_paper", "seminar_paper"}:
+            assessment_notes.append(
+                "A conventional Methods heading was not required by this initial structural check because the document was classified as a review/conceptual or seminar paper. Review-specific methods may still be appropriate for systematic or scoping reviews."
+            )
+        else:
+            assessment_notes.append(
+                "No Methods-section finding was raised because the document type is uncertain. A human reviewer should decide which structural requirements apply."
+            )
+
     if "references" not in detected:
         findings.append(_finding(
             "references.section_not_detected", "major", "References section not detected",
@@ -128,7 +215,6 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
          if re.match(r"^(references|bibliography|works cited)$", line)),
         None,
     )
-    duplicate_reference_lines: list[str] = []
     if reference_start is not None:
         reference_lines = [
             re.sub(r"\s+", " ", line).strip().lower()
@@ -136,13 +222,13 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
             if len(line.split()) >= 4
         ]
         counts = Counter(reference_lines)
-        duplicate_reference_lines = [line for line, count in counts.items() if count > 1]
-        for duplicate in duplicate_reference_lines[:10]:
-            findings.append(_finding(
-                "references.exact_duplicate_line", "major", "Possible duplicate reference entry",
-                "An identical non-heading line appears more than once in the detected references section. Confirm whether this is a duplicated reference.",
-                duplicate,
-            ))
+        for duplicate, count in counts.items():
+            if count > 1:
+                findings.append(_finding(
+                    "references.exact_duplicate_line", "major", "Possible duplicate reference entry",
+                    "An identical non-heading line appears more than once in the detected references section. Confirm whether this is a duplicated reference.",
+                    duplicate,
+                ))
 
     citation_count = len(IN_TEXT_AUTHOR_YEAR.findall(normalized))
     status = "review_required" if findings else "no_deterministic_flags"
@@ -151,10 +237,13 @@ def run_deterministic_checks(text: str) -> dict[str, Any]:
         "word_count": len(normalized.split()),
         "character_count": len(normalized),
         "detected_sections": detected,
+        "document_type": document_type,
+        "assessment_notes": assessment_notes,
         "citation_pattern_count": citation_count,
         "doi_pattern_count": doi_count,
         "findings": findings,
         "limitations": [
+            "Document-type classification is heuristic and must be confirmed by a human reviewer.",
             "Section detection uses heading patterns and may miss valid alternative headings.",
             "Citation counting is pattern-based and is not a full citation-to-reference reconciliation.",
             "DOI syntax checks do not verify DOI registration or metadata accuracy.",
