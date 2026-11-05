@@ -207,7 +207,11 @@ export default function ResearchIntegrityPage() {
           {loading && <div className="notice">Loading submissions...</div>}
           {!loading && !error && submissions.length === 0 && <div className="notice">No manuscripts submitted yet.</div>}
           <div className="list">
-            {submissions.map((item) => (
+            {submissions.map((item) => {
+              const report = reports[item.submission_id]?.report;
+              const documentType = report?.document_type;
+
+              return (
               <div className="listitem integrity-submission" key={item.submission_id}>
                 <div>
                   <strong>{item.file_name}</strong>
@@ -218,21 +222,21 @@ export default function ResearchIntegrityPage() {
                       {checkingId === item.submission_id ? "Checking manuscript..." : reports[item.submission_id] ? "Refresh checks" : item.status === "extraction_completed" ? "View saved checks" : "Run document checks"}
                     </button>
                   )}
-                  {reports[item.submission_id] && (
+                  {report && (
                     <div className="integrity-report">
                       <strong>Initial document report</strong>
-                      <p className="muted">{reports[item.submission_id].report.word_count.toLocaleString()} words · {reports[item.submission_id].report.detected_sections.length} detected sections · {reports[item.submission_id].report.findings.length} findings</p>
-                      {reports[item.submission_id].report.document_type && (
+                      <p className="muted">{report.word_count.toLocaleString()} words · {report.detected_sections.length} detected sections · {report.findings.length} findings</p>
+                      {report.document_type && (
                         <div className="integrity-classification">
-                          <strong>Detected document type: {reports[item.submission_id].report.document_type.label}</strong>
-                          <p className="muted">Classification confidence: {reports[item.submission_id].report.document_type.confidence}. This is an automated, rule-based classification and should be confirmed by a human reviewer.</p>
-                          <p>{reports[item.submission_id].report.document_type.basis}</p>
+                          <strong>Detected document type: {documentType.label}</strong>
+                          <p className="muted">Classification confidence: {documentType.confidence}. This is an automated, rule-based classification and should be confirmed by a human reviewer.</p>
+                          <p>{documentType.basis}</p>
                         </div>
                       )}
-                      {reports[item.submission_id].report.assessment_notes?.map((note, index) => (
+                      {report.assessment_notes?.map((note, index) => (
                         <p className="muted" key={`assessment-note-${index}`}>{note}</p>
                       ))}
-                      {reports[item.submission_id].report.findings.map((finding, index) => (
+                      {report.findings.map((finding, index) => (
                         <div className="integrity-finding" key={finding.rule_id + index}>
                           <strong>{finding.title}</strong>
                           <span className="integrity-severity">{finding.severity}</span>
@@ -240,7 +244,7 @@ export default function ResearchIntegrityPage() {
                           {finding.evidence && <blockquote>{finding.evidence}</blockquote>}
                         </div>
                       ))}
-                      {reports[item.submission_id].report.findings.length === 0 && <p>No deterministic flags were raised. This is not a certification of manuscript quality.</p>}
+                      {report.findings.length === 0 && <p>No deterministic flags were raised. This is not a certification of manuscript quality.</p>}
                       <p className="muted">These checks are preliminary and require human review. They do not detect plagiarism or verify DOI registration.</p>
                     </div>
                   )}
@@ -254,7 +258,8 @@ export default function ResearchIntegrityPage() {
                   {deletingId === item.submission_id ? "Deleting..." : "Delete"}
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       </main>
