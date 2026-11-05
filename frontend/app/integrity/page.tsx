@@ -226,7 +226,7 @@ export default function ResearchIntegrityPage() {
                     <div className="integrity-report">
                       <strong>Initial document report</strong>
                       <p className="muted">{report.word_count.toLocaleString()} words · {report.detected_sections.length} detected sections · {report.findings.length} findings</p>
-                      {report.document_type && (
+                      {documentType && (
                         <div className="integrity-classification">
                           <strong>Detected document type: {documentType.label}</strong>
                           <p className="muted">Classification confidence: {documentType.confidence}. This is an automated, rule-based classification and should be confirmed by a human reviewer.</p>
