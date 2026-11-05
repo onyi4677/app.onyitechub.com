@@ -32,6 +32,7 @@ app.add_middleware(
         "https://app-onyitechub-com-git-feat-research-integrit-08d9d7-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feat-screening-12-module-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feature-instruments-da-03fe60-onyitechub.vercel.app",
+        "https://app-onyitechub-com-git-feat-integrity-documen-c466bd-onyitechub.vercel.app",
     ],
     allow_origin_regex=r"https://app-onyitechub-[a-z0-9-]+-onyitechub\.vercel\.app",
     allow_credentials=True,
