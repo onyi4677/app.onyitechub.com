@@ -234,7 +234,7 @@ class ManuscriptExtractionTests(unittest.TestCase):
         with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")), patch.object(
             submissions, "_resources", return_value=(s3, table, "private-bucket")
         ):
-            with self.assertRaises(ClientError):
+            with self.assertRaises(SubmissionExpiredError):
                 extract_and_check_submission("user-a", "submission-race")
         self.assertEqual(s3.deleted[0]["Key"], "submissions/user-a/submission-race/derived/extracted.txt")
 
