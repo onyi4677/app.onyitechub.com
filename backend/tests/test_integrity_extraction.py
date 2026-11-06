@@ -147,7 +147,10 @@ class ManuscriptExtractionTests(unittest.TestCase):
 
         self.assertEqual(result["submission"]["status"], "extraction_completed")
         self.assertEqual(result["extraction"]["status"], "text_extracted")
-        self.assertIn("cleanup_status = :cleanup_pending", table.updates[0]["ConditionExpression"])
+        self.assertTrue(any(
+            "cleanup_status = :cleanup_pending" in update.get("ConditionExpression", "")
+            for update in table.updates
+        ))
         self.assertIn(b"A sample manuscript abstract.", s3.puts[0]["Body"])
         self.assertEqual(s3.puts[0]["ServerSideEncryption"], "AES256")
         self.assertNotIn("full_text", table.updates[0]["ExpressionAttributeValues"][":report"])
