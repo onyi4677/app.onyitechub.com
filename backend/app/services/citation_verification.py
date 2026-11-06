@@ -36,6 +36,7 @@ _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _CACHE_LOCK = threading.Lock()
 CACHE_SECONDS = 24 * 60 * 60
 HTTP_TIMEOUT = 8
+MAX_DOI_LOOKUPS = 20
 
 
 def _clean(value: str) -> str:
@@ -245,10 +246,9 @@ def verify_citations_and_references(
     doi_checks: list[dict[str, Any]] = []
     if check_external:
         email = crossref_email or os.getenv("CROSSREF_MAILTO")
-        for reference in references:
+        doi_references = [reference for reference in references if reference.get("doi")]
+        for reference in doi_references[:MAX_DOI_LOOKUPS]:
             doi = reference.get("doi")
-            if not doi:
-                continue
             crossref = _registry_lookup(doi, "crossref", email)
             registry = crossref
             if crossref["status"] == "not_found":
@@ -286,7 +286,9 @@ def verify_citations_and_references(
         "parsed_reference_count": len(references),
         "citations": citations[:500],
         "references": references[:500],
-        "doi_checks": doi_checks[:200],
+        "doi_checks": doi_checks[:MAX_DOI_LOOKUPS],
+        "doi_lookup_limit": MAX_DOI_LOOKUPS,
+        "doi_lookups_skipped": max(0, sum(1 for r in references if r.get("doi")) - len(doi_checks)),
         "findings": findings[:500],
         "summary": {
             "matched_citation_count": sum(1 for c in citations if (c["author_key"], c["year"]) in reference_keys),
