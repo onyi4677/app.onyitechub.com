@@ -1,5 +1,33 @@
 import { apiRequest } from "./client";
 
+export type IntegrityAiReviewStatus =
+  | "not_started"
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "not_supported";
+
+export type IntegrityAiFinding = {
+  category: string;
+  severity: "low" | "moderate" | "high";
+  location: string;
+  excerpt: string;
+  explanation: string;
+  recommendation: string;
+  confidence: "low" | "moderate" | "high";
+};
+
+export type IntegrityAiReport = {
+  summary: string;
+  document_type: string;
+  academic_level: string;
+  findings: IntegrityAiFinding[];
+  limitations: string[];
+  model_id: string;
+  reviewed_at: string;
+};
+
 export type IntegritySubmission = {
   submission_id: string;
   file_name: string;
@@ -8,6 +36,10 @@ export type IntegritySubmission = {
   status: "pending_upload" | "uploaded" | "extraction_completed" | "assessing" | "completed" | "failed";
   created_at: string;
   updated_at: string;
+  ai_review_status?: IntegrityAiReviewStatus;
+  ai_review_updated_at?: string;
+  ai_review_message?: string;
+  ai_report?: IntegrityAiReport;
 };
 
 type UploadPolicy = {
@@ -107,5 +139,22 @@ export async function extractIntegritySubmission(submissionId: string) {
   return apiRequest<IntegrityExtractionResult>(
     `/api/integrity/submissions/${encodeURIComponent(submissionId)}/extract`,
     { method: "POST" }
+  );
+}
+
+export async function queueIntegrityAiReview(submissionId: string) {
+  return apiRequest<{
+    submission_id: string;
+    ai_review_status: "queued";
+    message: string;
+  }>(
+    `/api/integrity/submissions/${encodeURIComponent(submissionId)}/ai-review`,
+    { method: "POST" }
+  );
+}
+
+export async function getIntegritySubmission(submissionId: string) {
+  return apiRequest<{ submission: IntegritySubmission }>(
+    `/api/integrity/submissions/${encodeURIComponent(submissionId)}`
   );
 }

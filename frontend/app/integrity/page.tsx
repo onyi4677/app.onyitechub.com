@@ -7,7 +7,9 @@ import {
   createIntegritySubmission,
   extractIntegritySubmission,
   deleteIntegritySubmission,
+  getIntegritySubmission,
   listIntegritySubmissions,
+  queueIntegrityAiReview,
   uploadIntegrityFile,
   type IntegritySubmission,
   type IntegrityExtractionResult,
@@ -27,6 +29,10 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function formatAiStatus(value?: string) {
+  return (value || "not_started").replaceAll("_", " ");
+}
+
 export default function ResearchIntegrityPage() {
   const [submissions, setSubmissions] = useState<IntegritySubmission[]>([]);
   const [file, setFile] = useState<File | null>(null);
@@ -35,6 +41,8 @@ export default function ResearchIntegrityPage() {
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const [checkingId, setCheckingId] = useState("");
+  const [aiReviewingId, setAiReviewingId] = useState("");
+  const [aiRefreshingId, setAiRefreshingId] = useState("");
   const [reports, setReports] = useState<Record<string, IntegrityExtractionResult>>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -106,7 +114,7 @@ export default function ResearchIntegrityPage() {
 
     setFile(null);
     setPermissionConfirmed(false);
-    setNotice("Manuscript uploaded securely. You can now run the initial deterministic document checks.");
+    setNotice("Manuscript uploaded securely. Run the initial document checks before requesting an AI review.");
     setUploading(false);
     try {
       await refresh();
@@ -129,6 +137,47 @@ export default function ResearchIntegrityPage() {
       setError(err instanceof Error ? err.message : "Unable to extract and check this manuscript.");
     } finally {
       setCheckingId("");
+    }
+  }
+
+  async function handleRunAiReview(submissionId: string) {
+    if (aiReviewingId || aiRefreshingId || deletingId) return;
+    setAiReviewingId(submissionId);
+    setError("");
+    setNotice("");
+    try {
+      const result = await queueIntegrityAiReview(submissionId);
+      setSubmissions((current) => current.map((item) =>
+        item.submission_id === submissionId
+          ? { ...item, ai_review_status: result.ai_review_status, ai_review_message: undefined }
+          : item
+      ));
+      setNotice("AI review queued successfully. Use Refresh AI status to check when the report is ready.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to start the AI manuscript review.");
+    } finally {
+      setAiReviewingId("");
+    }
+  }
+
+  async function handleRefreshAiStatus(submissionId: string) {
+    if (aiRefreshingId || aiReviewingId || deletingId) return;
+    setAiRefreshingId(submissionId);
+    setError("");
+    setNotice("");
+    try {
+      const result = await getIntegritySubmission(submissionId);
+      setSubmissions((current) => current.map((item) =>
+        item.submission_id === submissionId ? result.submission : item
+      ));
+      const status = result.submission.ai_review_status || "not_started";
+      setNotice(status === "completed"
+        ? "AI manuscript review completed. The report is displayed below."
+        : `AI review status: ${formatAiStatus(status)}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to refresh the AI review status.");
+    } finally {
+      setAiRefreshingId("");
     }
   }
 
@@ -162,8 +211,8 @@ export default function ResearchIntegrityPage() {
         </div>
 
         <div className="notice warning">
-          <strong>Current stage: deterministic manuscript checks</strong>
-          Uploads are stored privately. You can extract readable text and run initial rule-based checks. AI-assisted assessment, similarity comparison and downloadable reports are not yet available.
+          <strong>AI-assisted manuscript review — staging preview</strong>
+          Run the initial rule-based checks, then request a separate AI academic review. Similarity comparison and downloadable reports are not yet available. AI findings are advisory and require human verification.
         </div>
 
         <section className="card integrity-upload">
@@ -210,54 +259,111 @@ export default function ResearchIntegrityPage() {
             {submissions.map((item) => {
               const report = reports[item.submission_id]?.report;
               const documentType = report?.document_type;
+              const aiStatus = item.ai_review_status || "not_started";
+              const aiReport = item.ai_report;
 
               return (
-              <div className="listitem integrity-submission" key={item.submission_id}>
-                <div>
-                  <strong>{item.file_name}</strong>
-                  <div className="muted">{formatSize(item.size_bytes)} · Uploaded {formatDate(item.created_at)}</div>
-                  <div className="integrity-status">{item.status.replaceAll("_", " ")}</div>
-                  {(item.status === "uploaded" || item.status === "extraction_completed") && (
-                    <button className="button primary integrity-check-button" type="button" onClick={() => handleExtract(item.submission_id)} disabled={Boolean(checkingId) || Boolean(deletingId)}>
-                      {checkingId === item.submission_id ? "Checking manuscript..." : reports[item.submission_id] ? "Refresh checks" : item.status === "extraction_completed" ? "View saved checks" : "Run document checks"}
-                    </button>
-                  )}
-                  {report && (
-                    <div className="integrity-report">
-                      <strong>Initial document report</strong>
-                      <p className="muted">{report.word_count.toLocaleString()} words · {report.detected_sections.length} detected sections · {report.findings.length} findings</p>
-                      {documentType && (
-                        <div className="integrity-classification">
-                          <strong>Detected document type: {documentType.label}</strong>
-                          <p className="muted">Classification confidence: {documentType.confidence}. This is an automated, rule-based classification and should be confirmed by a human reviewer.</p>
-                          <p>{documentType.basis}</p>
-                        </div>
-                      )}
-                      {report.assessment_notes?.map((note, index) => (
-                        <p className="muted" key={`assessment-note-${index}`}>{note}</p>
-                      ))}
-                      {report.findings.map((finding, index) => (
-                        <div className="integrity-finding" key={finding.rule_id + index}>
-                          <strong>{finding.title}</strong>
-                          <span className="integrity-severity">{finding.severity}</span>
-                          <p>{finding.detail}</p>
-                          {finding.evidence && <blockquote>{finding.evidence}</blockquote>}
-                        </div>
-                      ))}
-                      {report.findings.length === 0 && <p>No deterministic flags were raised. This is not a certification of manuscript quality.</p>}
-                      <p className="muted">These checks are preliminary and require human review. They do not detect plagiarism or verify DOI registration.</p>
-                    </div>
-                  )}
+                <div className="listitem integrity-submission" key={item.submission_id}>
+                  <div>
+                    <strong>{item.file_name}</strong>
+                    <div className="muted">{formatSize(item.size_bytes)} · Uploaded {formatDate(item.created_at)}</div>
+                    <div className="integrity-status">{item.status.replaceAll("_", " ")}</div>
+                    {(item.status === "uploaded" || item.status === "extraction_completed") && (
+                      <button className="button primary integrity-check-button" type="button" onClick={() => handleExtract(item.submission_id)} disabled={Boolean(checkingId) || Boolean(deletingId)}>
+                        {checkingId === item.submission_id ? "Checking manuscript..." : reports[item.submission_id] ? "Refresh checks" : item.status === "extraction_completed" ? "View saved checks" : "Run document checks"}
+                      </button>
+                    )}
+                    {report && (
+                      <div className="integrity-report">
+                        <strong>Initial document report</strong>
+                        <p className="muted">{report.word_count.toLocaleString()} words · {report.detected_sections.length} detected sections · {report.findings.length} findings</p>
+                        {documentType && (
+                          <div className="integrity-classification">
+                            <strong>Detected document type: {documentType.label}</strong>
+                            <p className="muted">Classification confidence: {documentType.confidence}. This is an automated, rule-based classification and should be confirmed by a human reviewer.</p>
+                            <p>{documentType.basis}</p>
+                          </div>
+                        )}
+                        {report.assessment_notes?.map((note, index) => (
+                          <p className="muted" key={`assessment-note-${index}`}>{note}</p>
+                        ))}
+                        {report.findings.map((finding, index) => (
+                          <div className="integrity-finding" key={finding.rule_id + index}>
+                            <strong>{finding.title}</strong>
+                            <span className="integrity-severity">{finding.severity}</span>
+                            <p>{finding.detail}</p>
+                            {finding.evidence && <blockquote>{finding.evidence}</blockquote>}
+                          </div>
+                        ))}
+                        {report.findings.length === 0 && <p>No deterministic flags were raised. This is not a certification of manuscript quality.</p>}
+                        <p className="muted">These checks are preliminary and require human review. They do not detect plagiarism or verify DOI registration.</p>
+                      </div>
+                    )}
+
+                    {item.status === "extraction_completed" && (
+                      <div className="integrity-ai-review">
+                        <div className="integrity-status">AI review: {formatAiStatus(aiStatus)}</div>
+                        {aiStatus === "not_started" && (
+                          <button
+                            className="button primary integrity-check-button"
+                            type="button"
+                            onClick={() => handleRunAiReview(item.submission_id)}
+                            disabled={Boolean(aiReviewingId) || Boolean(aiRefreshingId) || Boolean(deletingId)}
+                          >
+                            {aiReviewingId === item.submission_id ? "Queueing AI review..." : "Run AI manuscript review"}
+                          </button>
+                        )}
+                        {(aiStatus === "queued" || aiStatus === "processing") && (
+                          <button
+                            className="button integrity-check-button"
+                            type="button"
+                            onClick={() => handleRefreshAiStatus(item.submission_id)}
+                            disabled={Boolean(aiRefreshingId) || Boolean(aiReviewingId) || Boolean(deletingId)}
+                          >
+                            {aiRefreshingId === item.submission_id ? "Refreshing..." : "Refresh AI status"}
+                          </button>
+                        )}
+                        {(aiStatus === "failed" || aiStatus === "not_supported") && (
+                          <p className="muted">{item.ai_review_message || "This AI review attempt could not be completed."}</p>
+                        )}
+                        {aiReport && (
+                          <div className="integrity-report">
+                            <strong>AI-assisted academic review</strong>
+                            <p className="muted">Document type: {aiReport.document_type} · Academic level: {aiReport.academic_level}</p>
+                            <p>{aiReport.summary}</p>
+                            <strong>Review findings ({aiReport.findings.length})</strong>
+                            {aiReport.findings.map((finding, index) => (
+                              <div className="integrity-finding" key={`ai-finding-${index}`}>
+                                <strong>{finding.category} · {finding.severity}</strong>
+                                {finding.location && <p className="muted">{finding.location}</p>}
+                                {finding.excerpt && <blockquote>{finding.excerpt}</blockquote>}
+                                <p>{finding.explanation}</p>
+                                {finding.recommendation && <p><strong>Recommendation:</strong> {finding.recommendation}</p>}
+                                <p className="muted">Confidence: {finding.confidence}. Verify this observation against the manuscript.</p>
+                              </div>
+                            ))}
+                            {aiReport.findings.length === 0 && <p>No specific AI findings were returned. Review the summary and limitations carefully.</p>}
+                            {aiReport.limitations.length > 0 && (
+                              <>
+                                <strong>Review limitations</strong>
+                                <ul>{aiReport.limitations.map((limitation, index) => <li key={`ai-limitation-${index}`}>{limitation}</li>)}</ul>
+                              </>
+                            )}
+                            <p className="muted">Reviewed {formatDate(aiReport.reviewed_at)}. Model-assisted assessment; not a plagiarism check, source verification, misconduct determination or guarantee of publication.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => handleDelete(item.submission_id)}
+                    disabled={Boolean(deletingId)}
+                  >
+                    {deletingId === item.submission_id ? "Deleting..." : "Delete"}
+                  </button>
                 </div>
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => handleDelete(item.submission_id)}
-                  disabled={Boolean(deletingId)}
-                >
-                  {deletingId === item.submission_id ? "Deleting..." : "Delete"}
-                </button>
-              </div>
               );
             })}
           </div>
