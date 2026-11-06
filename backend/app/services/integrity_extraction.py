@@ -232,12 +232,17 @@ def extract_and_check_submission(owner_sub: str, submission_id: str) -> dict[str
             "already_processed": False,
         }
 
-    except Exception:
+    except Exception as exc:
         if text_key:
             try:
                 s3.delete_object(Bucket=bucket, Key=text_key)
             except Exception:
                 pass
+        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+        if error_code == "ConditionalCheckFailedException":
+            raise SubmissionExpiredError(
+                "The manuscript processing window has ended. The saved assessment result, if any, remains available."
+            ) from exc
         raise
     finally:
         try:
