@@ -153,7 +153,11 @@ class ManuscriptExtractionTests(unittest.TestCase):
         ))
         self.assertIn(b"A sample manuscript abstract.", s3.puts[0]["Body"])
         self.assertEqual(s3.puts[0]["ServerSideEncryption"], "AES256")
-        self.assertNotIn("full_text", table.updates[0]["ExpressionAttributeValues"][":report"])
+        save_update = next(
+            update for update in table.updates
+            if ":report" in update.get("ExpressionAttributeValues", {})
+        )
+        self.assertNotIn("full_text", save_update["ExpressionAttributeValues"][":report"])
 
     def test_other_owner_cannot_extract_submission(self):
         item = {
