@@ -93,6 +93,178 @@ def _assert_within_retention_window(item: dict[str, Any]) -> None:
         )
 
 
+
+PROCESSING_LEASE_SECONDS = 90
+CLEANUP_LEASE_SECONDS = 90
+
+
+def acquire_processing_lease(
+    owner_sub: str,
+    submission_id: str,
+    allowed_statuses: tuple[str, ...],
+    require_extracted: bool = False,
+    lease_seconds: int = PROCESSING_LEASE_SECONDS,
+) -> str:
+    """Acquire an owner-scoped lease before processing manuscript content."""
+    if not isinstance(lease_seconds, int) or not 1 <= lease_seconds <= 300:
+        raise SubmissionValidationError("Invalid processing lease duration.")
+    if not allowed_statuses:
+        raise SubmissionValidationError("At least one processing status is required.")
+
+    _, table, _ = _resources()
+    key = {"owner_sub": owner_sub, "submission_id": submission_id}
+    response = table.get_item(Key=key, ConsistentRead=True)
+    item = response.get("Item")
+    if not item:
+        raise SubmissionNotFoundError()
+
+    _assert_within_retention_window(item)
+    if item.get("status") not in allowed_statuses:
+        raise SubmissionValidationError("This submission is not in a processable state.")
+    if require_extracted and not item.get("extracted_key"):
+        raise SubmissionValidationError("The manuscript text has not been extracted.")
+
+    now_epoch = _now_epoch()
+    token = str(uuid4())
+    names = {"#status": "status"}
+    values: dict[str, Any] = {
+        ":token": token,
+        ":until": now_epoch + lease_seconds,
+        ":now": now_epoch,
+        ":pending": "pending",
+    }
+    status_values = []
+    for index, status in enumerate(allowed_statuses):
+        placeholder = f":allowed{index}"
+        status_values.append(placeholder)
+        values[placeholder] = status
+
+    try:
+        table.update_item(
+            Key=key,
+            UpdateExpression=(
+                "SET processing_lease_token = :token, "
+                "processing_lease_until = :until"
+            ),
+            ConditionExpression=(
+                f"#status IN ({', '.join(status_values)}) "
+                "AND cleanup_status = :pending AND cleanup_at > :now "
+                "AND (attribute_not_exists(processing_lease_until) "
+                "OR processing_lease_until <= :now) "
+                "AND (attribute_not_exists(cleanup_lease_until) "
+                "OR cleanup_lease_until <= :now)"
+            ),
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            raise SubmissionValidationError(
+                "This submission is already being processed or is no longer available."
+            ) from exc
+        raise
+
+    return token
+
+
+def release_processing_lease(
+    owner_sub: str,
+    submission_id: str,
+    token: str,
+) -> None:
+    """Release only the processing lease owned by the caller."""
+    _, table, _ = _resources()
+    try:
+        table.update_item(
+            Key={"owner_sub": owner_sub, "submission_id": submission_id},
+            UpdateExpression=(
+                "REMOVE processing_lease_token, processing_lease_until"
+            ),
+            ConditionExpression="processing_lease_token = :token",
+            ExpressionAttributeValues={":token": token},
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+
+
+
+def acquire_cleanup_lease(
+    owner_sub: str,
+    submission_id: str,
+    require_expired: bool = False,
+    lease_seconds: int = CLEANUP_LEASE_SECONDS,
+) -> str | None:
+    """Acquire an exclusive cleanup lease without interrupting active processing."""
+    if not isinstance(lease_seconds, int) or not 1 <= lease_seconds <= 300:
+        raise SubmissionValidationError("Invalid cleanup lease duration.")
+
+    _, table, _ = _resources()
+    key = {"owner_sub": owner_sub, "submission_id": submission_id}
+    response = table.get_item(Key=key, ConsistentRead=True)
+    item = response.get("Item")
+    if not item:
+        raise SubmissionNotFoundError()
+
+    now_epoch = _now_epoch()
+    if item.get("cleanup_status") != "pending":
+        return None
+    if require_expired and int(item.get("cleanup_at", 0)) > now_epoch:
+        return None
+
+    token = str(uuid4())
+    condition = (
+        "cleanup_status = :pending "
+        "AND (attribute_not_exists(processing_lease_until) "
+        "OR processing_lease_until <= :now) "
+        "AND (attribute_not_exists(cleanup_lease_until) "
+        "OR cleanup_lease_until <= :now)"
+    )
+    values: dict[str, Any] = {
+        ":pending": "pending",
+        ":token": token,
+        ":until": now_epoch + lease_seconds,
+        ":now": now_epoch,
+    }
+    if require_expired:
+        condition += " AND cleanup_at <= :now"
+
+    try:
+        table.update_item(
+            Key=key,
+            UpdateExpression=(
+                "SET cleanup_lease_token = :token, cleanup_lease_until = :until"
+            ),
+            ConditionExpression=condition,
+            ExpressionAttributeValues=values,
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return None
+        raise
+
+    return token
+
+
+def release_cleanup_lease(
+    owner_sub: str,
+    submission_id: str,
+    token: str,
+) -> None:
+    """Release only the cleanup lease owned by the caller."""
+    _, table, _ = _resources()
+    try:
+        table.update_item(
+            Key={"owner_sub": owner_sub, "submission_id": submission_id},
+            UpdateExpression="REMOVE cleanup_lease_token, cleanup_lease_until",
+            ConditionExpression="cleanup_lease_token = :token",
+            ExpressionAttributeValues={":token": token},
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+
+
 def create_submission(
     owner_sub: str,
     file_name: str,
@@ -229,6 +401,18 @@ def _public_submission(item: dict[str, Any]) -> dict[str, Any]:
         "updated_at": item.get("updated_at", item["created_at"]),
         "content_retention_status": item.get("content_retention_status", "available"),
     }
+    result["ai_review_status"] = item.get("ai_review_status", "not_started")
+
+    if item.get("ai_review_updated_at"):
+        result["ai_review_updated_at"] = item["ai_review_updated_at"]
+
+    if item.get("ai_review_status") == "completed" and isinstance(item.get("ai_report"), dict):
+        result["ai_report"] = item["ai_report"]
+
+    if item.get("ai_review_status") in {"failed", "not_supported"}:
+        if item.get("ai_review_message"):
+            result["ai_review_message"] = item["ai_review_message"]
+
     if item.get("expires_at") is not None:
         result["expires_at"] = datetime.fromtimestamp(int(item["expires_at"]), timezone.utc).isoformat()
     return result
@@ -263,80 +447,131 @@ def get_submission(owner_sub: str, submission_id: str) -> dict[str, Any]:
 
 def delete_submission(owner_sub: str, submission_id: str) -> None:
     s3, table, bucket = _resources()
-    response = table.get_item(Key={"owner_sub": owner_sub, "submission_id": submission_id}, ConsistentRead=True)
-    item = response.get("Item")
-    if not item:
-        raise SubmissionNotFoundError()
-    s3.delete_object(Bucket=bucket, Key=item["object_key"])
-    if item.get("extracted_key"):
-        s3.delete_object(Bucket=bucket, Key=item["extracted_key"])
-    table.delete_item(
-        Key={"owner_sub": owner_sub, "submission_id": submission_id},
-        ConditionExpression="attribute_exists(submission_id)",
+    token = acquire_cleanup_lease(
+        owner_sub,
+        submission_id,
+        require_expired=False,
     )
+    if token is None:
+        raise SubmissionValidationError(
+            "This submission is currently being processed or is no longer available for deletion."
+        )
+
+    try:
+        response = table.get_item(
+            Key={"owner_sub": owner_sub, "submission_id": submission_id},
+            ConsistentRead=True,
+        )
+        item = response.get("Item")
+        if not item:
+            raise SubmissionNotFoundError()
+
+        if item.get("object_key"):
+            s3.delete_object(Bucket=bucket, Key=item["object_key"])
+        if item.get("extracted_key"):
+            s3.delete_object(Bucket=bucket, Key=item["extracted_key"])
+
+        table.delete_item(
+            Key={"owner_sub": owner_sub, "submission_id": submission_id},
+            ConditionExpression="cleanup_lease_token = :token AND cleanup_status = :pending",
+            ExpressionAttributeValues={
+                ":token": token,
+                ":pending": "pending",
+            },
+        )
+    finally:
+        release_cleanup_lease(owner_sub, submission_id, token)
 
 
 def cleanup_expired_submissions(now_epoch: int | None = None, page_size: int = 100) -> dict[str, int]:
     """Delete expired manuscript objects while retaining compact report records.
 
-    The GSI contains only records awaiting content cleanup. Failed S3 or
-    DynamoDB operations leave the item indexed so the next scheduled run retries.
+    Process one bounded GSI page per invocation. Later scheduled runs pick up
+    remaining records, avoiding pagination skips as index entries are removed.
     """
+    if page_size < 1 or page_size > 1000:
+        raise ValueError("page_size must be between 1 and 1000")
+
     s3, table, bucket = _resources()
     current_time = int(now_epoch if now_epoch is not None else _now_epoch())
     checked = cleaned = failed = 0
-    query_args: dict[str, Any] = {
-        "IndexName": CLEANUP_INDEX_NAME,
-        "KeyConditionExpression": Key("cleanup_status").eq("pending") & Key("cleanup_at").lte(current_time),
-        "Limit": page_size,
-    }
 
-    while True:
-        response = table.query(**query_args)
-        items = response.get("Items", [])
-        for item in items:
-            checked += 1
-            try:
-                if item.get("object_key"):
-                    s3.delete_object(Bucket=bucket, Key=item["object_key"])
-                if item.get("extracted_key"):
-                    s3.delete_object(Bucket=bucket, Key=item["extracted_key"])
+    response = table.query(
+        IndexName=CLEANUP_INDEX_NAME,
+        KeyConditionExpression=Key("cleanup_status").eq("pending") & Key("cleanup_at").lte(current_time),
+        Limit=page_size,
+    )
 
-                values = {
-                    ":pending": "pending",
-                    ":now": current_time,
-                    ":expired": "expired",
-                }
-                names = {}
+    for item in response.get("Items", []):
+        checked += 1
+        owner_sub = item["owner_sub"]
+        submission_id = item["submission_id"]
+        token = None
+
+        try:
+            token = acquire_cleanup_lease(
+                owner_sub,
+                submission_id,
+                require_expired=True,
+            )
+            if token is None:
+                continue
+
+            fresh = table.get_item(
+                Key={"owner_sub": owner_sub, "submission_id": submission_id},
+                ConsistentRead=True,
+            ).get("Item")
+
+            if not fresh:
+                continue
+
+            if fresh.get("object_key"):
+                s3.delete_object(Bucket=bucket, Key=fresh["object_key"])
+            if fresh.get("extracted_key"):
+                s3.delete_object(Bucket=bucket, Key=fresh["extracted_key"])
+
+            values = {
+                ":pending": "pending",
+                ":now": current_time,
+                ":expired": "expired",
+                ":token": token,
+            }
+            names = {}
+            update_expression = (
+                "SET content_retention_status = :expired, content_deleted_at = :now "
+                "REMOVE cleanup_status, cleanup_at, cleanup_lease_token, cleanup_lease_until"
+            )
+            if fresh.get("status") != "extraction_completed":
+                names["#status"] = "status"
                 update_expression = (
-                    "SET content_retention_status = :expired, content_deleted_at = :now "
-                    "REMOVE cleanup_status, cleanup_at"
+                    "SET #status = :expired, content_retention_status = :expired, content_deleted_at = :now "
+                    "REMOVE cleanup_status, cleanup_at, cleanup_lease_token, cleanup_lease_until"
                 )
-                if item.get("status") != "extraction_completed":
-                    names["#status"] = "status"
-                    update_expression = (
-                        "SET #status = :expired, content_retention_status = :expired, content_deleted_at = :now "
-                        "REMOVE cleanup_status, cleanup_at"
-                    )
-                update_args = {
-                    "Key": {"owner_sub": item["owner_sub"], "submission_id": item["submission_id"]},
-                    "UpdateExpression": update_expression,
-                    "ConditionExpression": "cleanup_status = :pending AND cleanup_at <= :now",
-                    "ExpressionAttributeValues": values,
-                }
-                if names:
-                    update_args["ExpressionAttributeNames"] = names
-                table.update_item(**update_args)
-                cleaned += 1
-            except Exception as exc:
-                # Keep cleanup_status/cleanup_at intact for retry on the next run.
-                failed += 1
-                logger.warning("Integrity retention cleanup item failed (%s).", type(exc).__name__)
 
-        last_key = response.get("LastEvaluatedKey")
-        if not last_key:
-            break
-        query_args["ExclusiveStartKey"] = last_key
+            update_args = {
+                "Key": {"owner_sub": owner_sub, "submission_id": submission_id},
+                "UpdateExpression": update_expression,
+                "ConditionExpression": (
+                    "cleanup_status = :pending AND cleanup_at <= :now "
+                    "AND cleanup_lease_token = :token"
+                ),
+                "ExpressionAttributeValues": values,
+            }
+            if names:
+                update_args["ExpressionAttributeNames"] = names
+
+            table.update_item(**update_args)
+            cleaned += 1
+
+        except Exception as exc:
+            failed += 1
+            logger.warning(
+                "Integrity retention cleanup item failed (%s).",
+                type(exc).__name__,
+            )
+        finally:
+            if token:
+                release_cleanup_lease(owner_sub, submission_id, token)
 
     logger.info(
         "Integrity retention cleanup finished: checked=%s cleaned=%s failed=%s",

@@ -33,7 +33,6 @@ app.add_middleware(
         "https://app-onyitechub-com-git-feat-screening-12-module-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feature-instruments-da-03fe60-onyitechub.vercel.app",
         "https://app-onyitechub-com-git-feat-integrity-documen-c466bd-onyitechub.vercel.app",
-        "https://app-onyitechub-g5w96gv3c-onyitechub.vercel.app",
     ],
     allow_origin_regex=r"https://app-onyitechub-[a-z0-9-]+-onyitechub\.vercel\.app",
     allow_credentials=True,
@@ -57,11 +56,33 @@ api_handler = Mangum(app)
 
 
 def handler(event, context):
-    """Dispatch scheduled retention cleanup events; send all other events to FastAPI."""
-    if (
-        isinstance(event, dict)
-        and event.get("source") == "aws.events"
-        and event.get("detail", {}).get("task") == "integrity-retention-cleanup"
-    ):
-        return cleanup_expired_submissions()
+    """Dispatch internal workers and scheduled cleanup; send HTTP events to FastAPI."""
+    if isinstance(event, dict):
+        detail = event.get("detail")
+
+        if (
+            event.get("source") == "aws.events"
+            and isinstance(detail, dict)
+            and detail.get("task") == "integrity-retention-cleanup"
+        ):
+            return cleanup_expired_submissions()
+
+        if event.get("source") == "onyitech.integrity":
+            if not isinstance(detail, dict) or detail.get("task") != "ai-review":
+                raise ValueError("Invalid integrity worker event.")
+
+            owner_sub = detail.get("owner_sub")
+            submission_id = detail.get("submission_id")
+            lease_token = detail.get("lease_token")
+
+            if not all(
+                isinstance(value, str) and value.strip()
+                for value in (owner_sub, submission_id, lease_token)
+            ):
+                raise ValueError("Invalid AI review worker event.")
+
+            from app.services.integrity_ai_review import run_ai_review
+
+            return run_ai_review(owner_sub, submission_id, lease_token)
+
     return api_handler(event, context)

@@ -22,6 +22,8 @@ from app.services.integrity_submissions import (
     _now_epoch,
     _public_submission,
     _resources,
+    acquire_processing_lease,
+    release_processing_lease,
 )
 
 MAX_EXTRACTED_CHARS = 1_000_000
@@ -99,70 +101,109 @@ def _extract_pdf(payload: bytes) -> str:
 
 def extract_and_check_submission(owner_sub: str, submission_id: str) -> dict[str, Any]:
     s3, table, bucket = _resources()
-    response = table.get_item(
+
+    initial = table.get_item(
         Key={"owner_sub": owner_sub, "submission_id": submission_id},
         ConsistentRead=True,
-    )
-    item = response.get("Item")
-    if not item:
+    ).get("Item")
+    if not initial:
         raise SubmissionNotFoundError()
-    if item.get("status") == "extraction_completed" and item.get("deterministic_report"):
+
+    if initial.get("status") == "extraction_completed" and initial.get("deterministic_report"):
         return {
-            "submission": _public_submission(item),
-            "report": item["deterministic_report"],
-            "extraction": item.get("extraction", {}),
+            "submission": _public_submission(initial),
+            "report": initial["deterministic_report"],
+            "extraction": initial.get("extraction", {}),
             "already_processed": True,
         }
-    _assert_within_retention_window(item)
-    if item.get("status") not in {"uploaded", "extraction_completed"}:
-        raise SubmissionValidationError("Upload the manuscript successfully before extracting its text.")
 
-    try:
-        obj = s3.get_object(Bucket=bucket, Key=item["object_key"])
-        payload = obj["Body"].read()
-    except Exception as exc:
-        raise SubmissionValidationError("The stored manuscript could not be retrieved.") from exc
-
-    if len(payload) != int(item["expected_size_bytes"]) or len(payload) > 15 * 1024 * 1024:
-        raise SubmissionValidationError("The stored manuscript size does not match the submission record.")
-
-    if item["content_type"] == "application/pdf":
-        extracted_text = _extract_pdf(payload)
-    elif item["content_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        if not payload.startswith(b"PK"):
-            raise SubmissionValidationError("The uploaded file is not a valid DOCX archive.")
-        extracted_text = _extract_docx(payload)
-    else:
-        raise SubmissionValidationError("This manuscript file type is not supported.")
-
-    if not extracted_text:
-        report = run_deterministic_checks("")
-        extraction_status = "no_readable_text"
-    else:
-        report = run_deterministic_checks(extracted_text)
-        extraction_status = "text_extracted"
-
-    text_key = f"submissions/{owner_sub}/{submission_id}/derived/extracted.txt"
-    s3.put_object(
-        Bucket=bucket,
-        Key=text_key,
-        Body=extracted_text.encode("utf-8"),
-        ContentType="text/plain; charset=utf-8",
-        ServerSideEncryption="AES256",
+    token = acquire_processing_lease(
+        owner_sub,
+        submission_id,
+        allowed_statuses=("uploaded", "extraction_completed"),
+        require_extracted=False,
     )
-    content_sha256 = hashlib.sha256(payload).hexdigest()
-    extraction = {
-        "status": extraction_status,
-        "word_count": report.get("word_count", 0),
-        "character_count": report.get("character_count", 0),
-        "sha256": content_sha256,
-        "extracted_at": datetime.now(timezone.utc).isoformat(),
-    }
+    text_key = None
+
     try:
+        response = table.get_item(
+            Key={"owner_sub": owner_sub, "submission_id": submission_id},
+            ConsistentRead=True,
+        )
+        item = response.get("Item")
+        if not item:
+            raise SubmissionNotFoundError()
+
+        if item.get("processing_lease_token") != token:
+            raise SubmissionValidationError("The manuscript processing lease is no longer valid.")
+
+        if item.get("status") == "extraction_completed" and item.get("deterministic_report"):
+            return {
+                "submission": _public_submission(item),
+                "report": item["deterministic_report"],
+                "extraction": item.get("extraction", {}),
+                "already_processed": True,
+            }
+
+        _assert_within_retention_window(item)
+        if item.get("status") not in {"uploaded", "extraction_completed"}:
+            raise SubmissionValidationError("Upload the manuscript successfully before extracting its text.")
+
+        try:
+            obj = s3.get_object(Bucket=bucket, Key=item["object_key"])
+            payload = obj["Body"].read()
+        except Exception as exc:
+            raise SubmissionValidationError("The stored manuscript could not be retrieved.") from exc
+
+        if len(payload) != int(item["expected_size_bytes"]) or len(payload) > 15 * 1024 * 1024:
+            raise SubmissionValidationError("The stored manuscript size does not match the submission record.")
+
+        if item["content_type"] == "application/pdf":
+            extracted_text = _extract_pdf(payload)
+        elif item["content_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            if not payload.startswith(b"PK"):
+                raise SubmissionValidationError("The uploaded file is not a valid DOCX archive.")
+            extracted_text = _extract_docx(payload)
+        else:
+            raise SubmissionValidationError("This manuscript file type is not supported.")
+
+        if not extracted_text:
+            report = run_deterministic_checks("")
+            extraction_status = "no_readable_text"
+        else:
+            report = run_deterministic_checks(extracted_text)
+            extraction_status = "text_extracted"
+
+        text_key = f"submissions/{owner_sub}/{submission_id}/derived/extracted.txt"
+        s3.put_object(
+            Bucket=bucket,
+            Key=text_key,
+            Body=extracted_text.encode("utf-8"),
+            ContentType="text/plain; charset=utf-8",
+            ServerSideEncryption="AES256",
+        )
+
+        content_sha256 = hashlib.sha256(payload).hexdigest()
+        extraction = {
+            "status": extraction_status,
+            "word_count": report.get("word_count", 0),
+            "character_count": report.get("character_count", 0),
+            "sha256": content_sha256,
+            "extracted_at": datetime.now(timezone.utc).isoformat(),
+        }
+
         table.update_item(
             Key={"owner_sub": owner_sub, "submission_id": submission_id},
-            UpdateExpression="SET #status = :status, extracted_key = :text_key, extraction = :extraction, deterministic_report = :report, updated_at = :updated",
-            ConditionExpression="#status IN (:uploaded, :completed) AND cleanup_status = :cleanup_pending AND cleanup_at > :now",
+            UpdateExpression=(
+                "SET #status = :status, extracted_key = :text_key, "
+                "extraction = :extraction, deterministic_report = :report, updated_at = :updated"
+            ),
+            ConditionExpression=(
+                "#status IN (:uploaded, :completed) "
+                "AND cleanup_status = :cleanup_pending AND cleanup_at > :now "
+                "AND processing_lease_token = :lease_token "
+                "AND processing_lease_until > :now"
+            ),
             ExpressionAttributeNames={"#status": "status"},
             ExpressionAttributeValues={
                 ":status": "extraction_completed",
@@ -174,26 +215,37 @@ def extract_and_check_submission(owner_sub: str, submission_id: str) -> dict[str
                 ":extraction": extraction,
                 ":report": report,
                 ":updated": extraction["extracted_at"],
+                ":lease_token": token,
             },
         )
-    except Exception as exc:
-        # A cleanup run may have started while extraction was in progress.
-        # Never leave a derived object behind when the conditional save fails.
-        try:
-            s3.delete_object(Bucket=bucket, Key=text_key)
-        except Exception:
-            pass
-        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
-        if error_code == "ConditionalCheckFailedException":
-            raise SubmissionExpiredError(
-                "The manuscript processing window has ended. The saved assessment result, if any, remains available."
-            ) from exc
+
+        item["status"] = "extraction_completed"
+        item["updated_at"] = extraction["extracted_at"]
+        item["extracted_key"] = text_key
+        item["extraction"] = extraction
+        item["deterministic_report"] = report
+
+        return {
+            "submission": _public_submission(item),
+            "report": report,
+            "extraction": extraction,
+            "already_processed": False,
+        }
+
+    except Exception:
+        if text_key:
+            try:
+                s3.delete_object(Bucket=bucket, Key=text_key)
+            except Exception:
+                pass
         raise
-    item["status"] = "extraction_completed"
-    item["updated_at"] = extraction["extracted_at"]
-    return {
-        "submission": _public_submission(item),
-        "report": report,
-        "extraction": extraction,
-        "already_processed": False,
-    }
+    finally:
+        try:
+            release_processing_lease(owner_sub, submission_id, token)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error(
+                "Could not release extraction lease for submission %s (%s)",
+                submission_id,
+                type(exc).__name__,
+            )
