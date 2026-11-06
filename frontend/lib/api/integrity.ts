@@ -18,6 +18,45 @@ export type IntegrityAiFinding = {
   confidence: "low" | "moderate" | "high";
 };
 
+export type CitationVerificationSummary = {
+  matched_citation_count?: number;
+  unmatched_citation_count?: number;
+  uncited_reference_count?: number;
+  doi_checked_count?: number;
+};
+
+export type CitationVerificationFinding = {
+  rule_id: string;
+  status: string;
+  severity: string;
+  citation?: string;
+  reference?: string;
+  doi?: string;
+  detail: string;
+};
+
+export type CitationDoiCheck = {
+  doi: string;
+  registry_result?: {
+    status?: string;
+    registry?: string;
+    title?: string;
+    authors?: string[];
+    year?: string;
+  };
+  metadata_comparison?: string;
+};
+
+export type CitationVerificationReport = {
+  status: string;
+  citation_count?: number;
+  parsed_reference_count?: number;
+  summary?: CitationVerificationSummary | string;
+  findings?: CitationVerificationFinding[];
+  doi_checks?: CitationDoiCheck[];
+  limitations?: string[];
+};
+
 export type IntegrityAiReport = {
   summary: string;
   document_type: string;
@@ -26,6 +65,7 @@ export type IntegrityAiReport = {
   limitations: string[];
   model_id: string;
   reviewed_at: string;
+  citation_verification?: CitationVerificationReport;
 };
 
 export type IntegritySubmission = {
@@ -122,6 +162,7 @@ export type IntegrityExtractionResult = {
     assessment_notes?: string[];
     citation_pattern_count?: number;
     doi_pattern_count?: number;
+    citation_verification?: CitationVerificationReport;
     findings: IntegrityFinding[];
     limitations: string[];
   };
