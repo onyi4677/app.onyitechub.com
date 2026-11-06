@@ -107,7 +107,7 @@ def _reference_entries(text: str) -> tuple[str, list[dict[str, Any]]]:
         dois = [m.group(1).rstrip(".,;:)]}") for m in DOI_RE.finditer(entry)]
         urls = [m.group(0).rstrip(".,;:)]}") for m in URL_RE.finditer(entry)]
         parsed.append({
-            "text": entry[:1200],
+            "text": entry[:500],
             "author_key": author,
             "year": year,
             "doi": dois[0] if dois else None,
@@ -284,12 +284,12 @@ def verify_citations_and_references(
         "citation_style_scope": "author_year",
         "citation_count": len(citations),
         "parsed_reference_count": len(references),
-        "citations": citations[:500],
-        "references": references[:500],
+        "citations": citations[:200],
+        "references": references[:100],
         "doi_checks": doi_checks[:MAX_DOI_LOOKUPS],
         "doi_lookup_limit": MAX_DOI_LOOKUPS,
         "doi_lookups_skipped": max(0, sum(1 for r in references if r.get("doi")) - len(doi_checks)),
-        "findings": findings[:500],
+        "findings": findings[:100],
         "summary": {
             "matched_citation_count": sum(1 for c in citations if (c["author_key"], c["year"]) in reference_keys),
             "unmatched_citation_count": sum(1 for c in citations if (c["author_key"], c["year"]) not in reference_keys),
