@@ -35,8 +35,8 @@ YEAR_SUFFIX_RE = re.compile(r"\\(((?:19|20)\\d{2}[a-z]?)\\)", re.I)
 _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _CACHE_LOCK = threading.Lock()
 CACHE_SECONDS = 24 * 60 * 60
-HTTP_TIMEOUT = 8
-MAX_DOI_LOOKUPS = 20
+HTTP_TIMEOUT = 4
+MAX_DOI_LOOKUPS = 10
 
 
 def _clean(value: str) -> str:
@@ -127,7 +127,9 @@ def _registry_lookup(doi: str, registry: str, email: str | None) -> dict[str, An
         endpoint = "https://api.crossref.org/works/" + quote(doi, safe="/")
         if email:
             endpoint += "?mailto=" + quote(email, safe="@.+-")
-        headers = {"User-Agent": "OnyitechResearchWorkspace/1.0 (mailto:" + (email or "support@onyitechub.com") + ")"}
+        headers = {"User-Agent": "OnyitechResearchWorkspace/1.0"}
+        if email:
+            headers["User-Agent"] += " (mailto:" + email + ")"
     else:
         endpoint = "https://api.datacite.org/dois/" + quote(doi, safe="/")
         headers = {"Accept": "application/vnd.api+json", "User-Agent": "OnyitechResearchWorkspace/1.0"}
