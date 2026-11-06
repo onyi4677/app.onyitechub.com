@@ -163,6 +163,8 @@ class IntegritySubmissionValidationTests(unittest.TestCase):
             "extracted_key": "submissions/user-a/submission-1/derived/extracted.txt",
             "status": "uploaded",
             "created_at": "2026-11-03T10:00:00+00:00",
+            "cleanup_status": "pending",
+            "cleanup_at": 4_000_000_000,
         }
         table = FakeTable(item)
         s3 = FakeS3()
@@ -198,9 +200,12 @@ class IntegritySubmissionValidationTests(unittest.TestCase):
 
         self.assertEqual(result, {"checked": 1, "cleaned": 1, "failed": 0})
         self.assertEqual([call["Key"] for call in s3.deleted], [item["object_key"], item["extracted_key"]])
-        update = table.update_calls[0]
-        self.assertIn("REMOVE cleanup_status, cleanup_at", update["UpdateExpression"])
-        self.assertIn("cleanup_status = :pending", update["ConditionExpression"])
+        cleanup_update = next(
+            call for call in table.update_calls
+            if "REMOVE cleanup_status, cleanup_at" in call["UpdateExpression"]
+        )
+        self.assertIn("cleanup_status = :pending", cleanup_update["ConditionExpression"])
+        self.assertIn("cleanup_lease_token = :token", cleanup_update["ConditionExpression"])
         self.assertEqual(item["deterministic_report"], report)
 
     def test_cleanup_failure_leaves_record_eligible_for_retry(self):
@@ -223,7 +228,10 @@ class IntegritySubmissionValidationTests(unittest.TestCase):
             result = cleanup_expired_submissions(now_epoch=1800)
 
         self.assertEqual(result, {"checked": 1, "cleaned": 0, "failed": 1})
-        self.assertEqual(table.update_calls, [])
+        self.assertFalse(any(
+            "REMOVE cleanup_status, cleanup_at" in call.get("UpdateExpression", "")
+            for call in table.update_calls
+        ))
         self.assertEqual(item["cleanup_status"], "pending")
 
     def test_expired_submission_is_rejected_for_new_processing(self):

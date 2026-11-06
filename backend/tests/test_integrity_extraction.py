@@ -9,6 +9,7 @@ from docx import Document
 from pypdf import PdfWriter
 
 from app.services import integrity_extraction as extraction
+from app.services import integrity_submissions as submissions
 from app.services.integrity_extraction import (
     _extract_docx,
     _extract_pdf,
@@ -38,8 +39,16 @@ class FakeTable:
 
     def update_item(self, **kwargs):
         self.updates.append(kwargs)
-        if self.update_error:
+        expression = kwargs.get("UpdateExpression", "")
+        if self.update_error and expression.startswith("SET #status = :status"):
             raise self.update_error
+        values = kwargs.get("ExpressionAttributeValues", {})
+        if "processing_lease_token" in expression and ":token" in values:
+            self.item["processing_lease_token"] = values[":token"]
+            self.item["processing_lease_until"] = values.get(":until")
+        if expression.startswith("REMOVE processing_lease_token"):
+            self.item.pop("processing_lease_token", None)
+            self.item.pop("processing_lease_until", None)
 
 
 class FakeS3:
@@ -131,15 +140,24 @@ class ManuscriptExtractionTests(unittest.TestCase):
         }
         table = FakeTable(item)
         s3 = FakeS3(payload)
-        with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")):
+        with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")), patch.object(
+            submissions, "_resources", return_value=(s3, table, "private-bucket")
+        ):
             result = extract_and_check_submission("user-a", "submission-1")
 
         self.assertEqual(result["submission"]["status"], "extraction_completed")
         self.assertEqual(result["extraction"]["status"], "text_extracted")
-        self.assertIn("cleanup_status = :cleanup_pending", table.updates[0]["ConditionExpression"])
+        self.assertTrue(any(
+            "cleanup_status = :cleanup_pending" in update.get("ConditionExpression", "")
+            for update in table.updates
+        ))
         self.assertIn(b"A sample manuscript abstract.", s3.puts[0]["Body"])
         self.assertEqual(s3.puts[0]["ServerSideEncryption"], "AES256")
-        self.assertNotIn("full_text", table.updates[0]["ExpressionAttributeValues"][":report"])
+        save_update = next(
+            update for update in table.updates
+            if ":report" in update.get("ExpressionAttributeValues", {})
+        )
+        self.assertNotIn("full_text", save_update["ExpressionAttributeValues"][":report"])
 
     def test_other_owner_cannot_extract_submission(self):
         item = {
@@ -149,7 +167,9 @@ class ManuscriptExtractionTests(unittest.TestCase):
         }
         table = FakeTable(item)
         s3 = FakeS3(b"")
-        with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")):
+        with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")), patch.object(
+            submissions, "_resources", return_value=(s3, table, "private-bucket")
+        ):
             with self.assertRaises(Exception):
                 extract_and_check_submission("user-b", "submission-1")
         self.assertEqual(s3.puts, [])
@@ -167,7 +187,7 @@ class ManuscriptExtractionTests(unittest.TestCase):
         table = FakeTable(item)
         s3 = FakeS3(b"")
         with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")), patch.object(
-            extraction, "_assert_within_retention_window", side_effect=SubmissionExpiredError("expired")
+            submissions, "_resources", return_value=(s3, table, "private-bucket")
         ):
             with self.assertRaises(SubmissionExpiredError):
                 extract_and_check_submission("user-a", "submission-expired")
@@ -218,7 +238,9 @@ class ManuscriptExtractionTests(unittest.TestCase):
             "UpdateItem",
         )
         s3 = FakeS3(payload)
-        with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")):
+        with patch.object(extraction, "_resources", return_value=(s3, table, "private-bucket")), patch.object(
+            submissions, "_resources", return_value=(s3, table, "private-bucket")
+        ):
             with self.assertRaises(SubmissionExpiredError):
                 extract_and_check_submission("user-a", "submission-race")
         self.assertEqual(s3.deleted[0]["Key"], "submissions/user-a/submission-race/derived/extracted.txt")
