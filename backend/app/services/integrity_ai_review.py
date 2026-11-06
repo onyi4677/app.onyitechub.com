@@ -10,6 +10,8 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 
+from app.services.citation_verification import verify_citations_and_references
+
 from app.services.integrity_submissions import (
     _now,
     _now_epoch,
@@ -42,7 +44,7 @@ Assess, where relevant:
 - appropriateness and clarity of methodology, sampling, instruments and analysis;
 - unsupported claims, evidence gaps and internal inconsistencies;
 - statistical reporting and interpretation;
-- citation and reference consistency, including apparent DOI formatting issues;
+- citation and reference consistency, using the supplied deterministic citation reconciliation and DOI registry evidence where available;
 - academic structure, clarity, repetition and logical flow.
 
 Do not claim that you searched plagiarism databases, verified source existence,
@@ -302,6 +304,24 @@ def run_ai_review(
         if len(manuscript_text) != char_count:
             raise ValueError("The extracted text length does not match its extraction record.")
 
+        citation_verification = verify_citations_and_references(
+            manuscript_text,
+            check_external=True,
+        )
+        citation_evidence = {
+            "summary": citation_verification.get("summary", {}),
+            "findings": citation_verification.get("findings", [])[:60],
+            "doi_checks": [
+                {
+                    "doi": item.get("doi"),
+                    "registry_result": item.get("registry_result"),
+                    "metadata_comparison": item.get("metadata_comparison"),
+                }
+                for item in citation_verification.get("doi_checks", [])[:20]
+            ],
+            "limitations": citation_verification.get("limitations", []),
+        }
+
         bedrock = boto3.client(
             "bedrock-runtime",
             region_name=os.getenv("AWS_REGION", "us-east-1"),
@@ -314,7 +334,11 @@ def run_ai_review(
                 "content": [{
                     "text": (
                         "Review the following manuscript according to the system instructions. "
-                        "Return only the requested JSON object.\n\n"
+                        "Use the citation verification evidence below as the factual basis for citation/DOI findings. "
+                        "Do not infer that unverified references are fabricated. Return only the requested JSON object.\n\n"
+                        "<CITATION_VERIFICATION_EVIDENCE>\n"
+                        + json.dumps(citation_evidence, ensure_ascii=False)
+                        + "\n</CITATION_VERIFICATION_EVIDENCE>\n\n"
                         "<MANUSCRIPT>\n"
                         + manuscript_text
                         + "\n</MANUSCRIPT>"
@@ -336,6 +360,7 @@ def run_ai_review(
             raise ValueError("The AI review returned an empty response.")
 
         report = _parse_report(raw_text, manuscript_text)
+        report["citation_verification"] = citation_evidence
         saved = _set_terminal_status(
             table, key, lease_token, "completed", report=report
         )
