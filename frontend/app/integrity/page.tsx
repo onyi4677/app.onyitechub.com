@@ -261,6 +261,9 @@ export default function ResearchIntegrityPage() {
               const documentType = report?.document_type;
               const aiStatus = item.ai_review_status || "not_started";
               const aiReport = item.ai_report;
+              const citationReport = report?.citation_verification;
+              const citationSummary = citationReport?.summary && typeof citationReport.summary === "object" ? citationReport.summary : undefined;
+              const aiCitation = aiReport?.citation_verification;
 
               return (
                 <div className="listitem integrity-submission" key={item.submission_id}>
@@ -287,6 +290,31 @@ export default function ResearchIntegrityPage() {
                         {report.assessment_notes?.map((note, index) => (
                           <p className="muted" key={`assessment-note-${index}`}>{note}</p>
                         ))}
+                        {citationReport && (
+                          <div className="integrity-classification">
+                            <strong>Citation and reference matching</strong>
+                            {citationSummary ? (
+                              <p className="muted">
+                                {citationSummary.matched_citation_count ?? 0} matched · {citationSummary.unmatched_citation_count ?? 0} unmatched citations · {citationSummary.uncited_reference_count ?? 0} uncited references
+                              </p>
+                            ) : <p className="muted">Citation matching could not be assessed from the extracted text.</p>}
+                            {citationReport.findings?.map((finding, index) => (
+                              <div className="integrity-finding" key={`citation-finding-${finding.rule_id}-${index}`}>
+                                <strong>{finding.rule_id.replaceAll(".", " ")}</strong>
+                                <span className="integrity-severity">{finding.severity}</span>
+                                <p>{finding.detail}</p>
+                                {finding.citation && <blockquote>{finding.citation}</blockquote>}
+                                {finding.reference && <blockquote>{finding.reference}</blockquote>}
+                              </div>
+                            ))}
+                            {(!citationReport.findings || citationReport.findings.length === 0) && (
+                              <p>No unmatched citations or uncited references were detected by the initial author–year check.</p>
+                            )}
+                            {citationReport.limitations?.map((limitation, index) => (
+                              <p className="muted" key={`citation-limit-${index}`}>{limitation}</p>
+                            ))}
+                          </div>
+                        )}
                         {report.findings.map((finding, index) => (
                           <div className="integrity-finding" key={finding.rule_id + index}>
                             <strong>{finding.title}</strong>
@@ -331,6 +359,28 @@ export default function ResearchIntegrityPage() {
                             <strong>AI-assisted academic review</strong>
                             <p className="muted">Document type: {aiReport.document_type} · Academic level: {aiReport.academic_level}</p>
                             <p>{aiReport.summary}</p>
+                            {aiCitation && (
+                              <div className="integrity-classification">
+                                <strong>External DOI registry checks</strong>
+                                <p className="muted">
+                                  {aiCitation.doi_checks?.length || 0} DOI records checked against Crossref and, when not found there, DataCite.
+                                </p>
+                                {aiCitation.doi_checks?.map((check, index) => (
+                                  <div className="integrity-finding" key={`doi-check-${index}`}>
+                                    <strong>{check.doi}</strong>
+                                    <span className="integrity-severity">{check.metadata_comparison?.replaceAll("_", " ") || "not verified"}</span>
+                                    <p className="muted">
+                                      Registry: {check.registry_result?.registry || "unknown"} · Record status: {check.registry_result?.status || "unavailable"}
+                                    </p>
+                                    {check.registry_result?.title && <p>{check.registry_result.title}</p>}
+                                    {check.registry_result?.year && <p className="muted">Registry publication year: {check.registry_result.year}</p>}
+                                  </div>
+                                ))}
+                                {aiCitation.limitations?.map((limitation, index) => (
+                                  <p className="muted" key={`ai-citation-limit-${index}`}>{limitation}</p>
+                                ))}
+                              </div>
+                            )}
                             <strong>Review findings ({aiReport.findings.length})</strong>
                             {aiReport.findings.map((finding, index) => (
                               <div className="integrity-finding" key={`ai-finding-${index}`}>
@@ -349,7 +399,7 @@ export default function ResearchIntegrityPage() {
                                 <ul>{aiReport.limitations.map((limitation, index) => <li key={`ai-limitation-${index}`}>{limitation}</li>)}</ul>
                               </>
                             )}
-                            <p className="muted">Reviewed {formatDate(aiReport.reviewed_at)}. Model-assisted assessment; not a plagiarism check, source verification, misconduct determination or guarantee of publication.</p>
+                            <p className="muted">Reviewed {formatDate(aiReport.reviewed_at)}. Model-assisted assessment with limited DOI registry checks; not a plagiarism check, complete source-authenticity check, misconduct determination or guarantee of publication.</p>
                           </div>
                         )}
                       </div>
