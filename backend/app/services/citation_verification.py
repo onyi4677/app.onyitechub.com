@@ -26,7 +26,7 @@ DOI_RE = re.compile(r'(?:https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/[^\s<>"\]]+)'
 URL_RE = re.compile(r'https?://[^\s<>"\]]+', re.I)
 PAREN_CITATION_RE = re.compile(r"\(([^()]{1,350}?(?:19|20)\d{2}[a-z]?[^()]*)\)")
 NARRATIVE_CITATION_RE = re.compile(
-    r"(?P<author>[A-Z][A-Za-z'’.-]+(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z'’.-]+|and\s+[A-Z][A-Za-z'’.-]+))?)"
+    r"(?P<author>[A-Z][A-Za-z'’.-]*(?:\s+(?:[A-Z][A-Za-z'’.-]*|et\s+al\.?)){0,7}(?:['’]s)?)"
     r"\s*\((?P<year>(?:19|20)\d{2}[a-z]?)\)", re.I
 )
 REFERENCE_HEADING_RE = re.compile(r"^\s*(references|bibliography|works cited)\s*$", re.I)
@@ -49,23 +49,39 @@ def _clean(value: str) -> str:
 
 
 def _author_key(value: str) -> str:
+    """Return a comparable surname or full corporate-author name."""
     value = re.sub(r"^\s*\d+[.)]?\s*", "", value)
     value = re.sub(r"\bet\s+al\.?\b", "", value, flags=re.I)
+    value = re.sub(r"['’]s\s*$", "", value.strip(), flags=re.I)
     value = re.split(r"\s+(?:&|and)\s+", value, maxsplit=1, flags=re.I)[0]
-    value = re.sub(r"[^A-Za-z'’-]", "", value.split(",")[0] if "," in value else value.split()[0] if value.split() else "")
-    return value.casefold()
+    value = value.strip(" ,.;")
+    # Corporate authors are multi-word names; reducing them to the first word
+    # creates collisions (e.g. Federal Ministry vs Federal Government).
+    corporate_terms = (
+        "organization", "organisation", "commission", "ministry", "department",
+        "bureau", "association", "agency", "committee", "university", "institute",
+        "council", "government", "population", "world health", "national institute",
+    )
+    if any(term in value.casefold() for term in corporate_terms):
+        return " ".join(re.findall(r"[A-Za-z0-9]+", value.casefold()))
+    first = value.split(",")[0] if "," in value else (value.split()[0] if value.split() else "")
+    return re.sub(r"[^A-Za-z0-9]", "", first).casefold()
 
 
 def _split_citation_group(group: str) -> list[tuple[str, str]]:
+    """Parse semicolon-separated author groups and repeated years for one author."""
     found: list[tuple[str, str]] = []
     for part in group.split(";"):
-        match = re.search(r"(?P<author>.*?)(?:,\s*|\s+) (?P<year>(?:19|20)\d{2}[a-z]?)$", part.strip(), re.I)
-        if not match:
-            match = re.search(r"(?P<author>.+?)[, ]+(?P<year>(?:19|20)\d{2}[a-z]?)$", part.strip(), re.I)
-        if match:
-            author = _author_key(match.group("author"))
-            if author:
-                found.append((author, match.group("year").casefold()))
+        part = part.strip()
+        year_matches = list(YEAR_RE.finditer(part))
+        if not year_matches:
+            continue
+        # All years in one semicolon-delimited segment belong to the same author,
+        # as in (World Health Organization, 2018, 2023).
+        author = _author_key(part[:year_matches[0].start()].strip(" ,.;"))
+        if author:
+            for match in year_matches:
+                found.append((author, match.group(1).casefold()))
     return found
 
 
@@ -255,7 +271,8 @@ def _check_url(url: str) -> dict[str, Any]:
             with opener.open(request, timeout=HTTP_TIMEOUT) as response:
                 result = {"status": "accessible", "http_status": response.status, "final_url": response.geturl()}
         except HTTPError as exc:
-            if exc.code in {405, 501}:
+            # Some scholarly hosts reject HEAD (403/405/501) while allowing GET.
+            if exc.code in {403, 405, 501}:
                 try:
                     get_request = Request(url, headers={"User-Agent": "OnyitechResearchWorkspace/1.0", "Range": "bytes=0-0"}, method="GET")
                     with opener.open(get_request, timeout=HTTP_TIMEOUT) as response:
