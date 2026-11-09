@@ -361,9 +361,12 @@ export default function ResearchIntegrityPage() {
                             <p>{aiReport.summary}</p>
                             {aiCitation && (
                               <div className="integrity-classification">
-                                <strong>External DOI registry checks</strong>
+                                <strong>External DOI registry and URL checks</strong>
                                 <p className="muted">
                                   {aiCitation.doi_checks?.length || 0} DOI records checked against Crossref and, when not found there, DataCite.
+                                </p>
+                                <p className="muted">
+                                  {aiCitation.doi_checks?.length || 0} DOI records checked · {aiCitation.url_checks?.length || 0} reference URLs checked · {(aiCitation.url_checks || []).filter((check) => check.status === "inaccessible").length} URLs returned HTTP errors.
                                 </p>
                                 {aiCitation.doi_checks?.map((check, index) => (
                                   <div className="integrity-finding" key={`doi-check-${index}`}>
@@ -374,6 +377,16 @@ export default function ResearchIntegrityPage() {
                                     </p>
                                     {check.registry_result?.title && <p>{check.registry_result.title}</p>}
                                     {check.registry_result?.year && <p className="muted">Registry publication year: {check.registry_result.year}</p>}
+                                  </div>
+                                ))}
+                                {aiCitation.url_checks?.map((check, index) => (
+                                  <div className="integrity-finding" key={`url-check-${index}`}>
+                                    <strong>{check.url}</strong>
+                                    <span className="integrity-severity">{check.status?.replaceAll("_", " ") || "not verified"}</span>
+                                    <p className="muted">
+                                      {check.http_status ? `HTTP ${check.http_status}` : "No HTTP response"}{check.final_url && check.final_url !== check.url ? ` · Redirected to ${check.final_url}` : ""}
+                                    </p>
+                                    {check.reason && <p className="muted">{check.reason}</p>}
                                   </div>
                                 ))}
                                 {aiCitation.limitations?.map((limitation, index) => (
