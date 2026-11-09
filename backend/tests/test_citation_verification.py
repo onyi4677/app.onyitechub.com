@@ -22,6 +22,31 @@ Jones, A., Brown, B., & Green, C. (2020). Another research article. Research Rev
         self.assertEqual(result["summary"]["unmatched_citation_count"], 0)
         self.assertEqual(result["summary"]["uncited_reference_count"], 0)
 
+    def test_matches_institutional_authors_and_multiple_years(self):
+        manuscript = """Introduction
+The guidance is consistent across reports (World Health Organization, 2018, 2023).
+National data support this position (National Population Commission [Nigeria] & ICF, 2025).
+
+References
+World Health Organization. (2018). International technical guidance on sexuality education. WHO.
+World Health Organization. (2023). Comprehensive sexuality education. WHO.
+National Population Commission [Nigeria], & ICF. (2025). Nigeria Demographic and Health Survey 2023-24. NPC and ICF.
+"""
+        result = verify_citations_and_references(manuscript, check_external=False)
+        self.assertEqual(result["summary"]["unmatched_citation_count"], 0)
+        self.assertEqual(result["summary"]["uncited_reference_count"], 0)
+
+    def test_matches_possessive_narrative_citation(self):
+        manuscript = """Introduction
+Collins's (2003) work provides a useful framework.
+
+References
+Collins, W. A. (2003). More than a myth: The developmental significance of romantic relationships during adolescence. Journal of Research on Adolescence.
+"""
+        result = verify_citations_and_references(manuscript, check_external=False)
+        self.assertEqual(result["summary"]["unmatched_citation_count"], 0)
+        self.assertEqual(result["summary"]["uncited_reference_count"], 0)
+
     def test_reports_citation_without_reference_and_uncited_reference(self):
         manuscript = """Introduction
 This was previously reported (Missing, 2019).
