@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from app.services.citation_verification import verify_citations_and_references
+from app.services.citation_verification import _is_public_http_url, verify_citations_and_references
 
 
 class CitationVerificationTests(unittest.TestCase):
@@ -73,6 +73,51 @@ Smith, J. (2021). A relevant research article. Journal of Testing. https://doi.o
         result = verify_citations_and_references("  ", check_external=False)
         self.assertEqual(result["status"], "not_assessed")
         self.assertEqual(result["citation_count"], 0)
+
+    @patch("app.services.citation_verification._registry_lookup")
+    def test_doi_title_and_author_mismatch_is_not_verified(self, registry_lookup):
+        registry_lookup.return_value = {
+            "status": "found",
+            "registry": "crossref",
+            "doi": "10.1234/example",
+            "title": "A completely different paper",
+            "authors": ["Other"],
+            "year": "2021",
+        }
+        manuscript = """Introduction
+A prior study (Smith, 2021).
+
+References
+Smith, J. (2021). A relevant research article. Journal of Testing. https://doi.org/10.1234/example
+"""
+        result = verify_citations_and_references(manuscript, check_external=True)
+        self.assertEqual(result["doi_checks"][0]["metadata_comparison"], "metadata_mismatch")
+        self.assertIn(
+            "reference.doi_metadata_mismatch",
+            {finding["rule_id"] for finding in result["findings"]},
+        )
+
+    @patch("app.services.citation_verification._check_url")
+    def test_reference_url_accessibility_is_included_in_report(self, check_url):
+        check_url.return_value = {
+            "status": "accessible",
+            "http_status": 200,
+            "final_url": "https://example.org/article",
+        }
+        manuscript = """Introduction
+A prior study (Smith, 2021).
+
+References
+Smith, J. (2021). A relevant research article. Journal of Testing. https://example.org/article
+"""
+        result = verify_citations_and_references(manuscript, check_external=True)
+        self.assertEqual(result["url_checks"][0]["status"], "accessible")
+        self.assertEqual(result["summary"]["url_checked_count"], 1)
+        check_url.assert_called_once_with("https://example.org/article")
+
+    def test_private_or_local_url_is_rejected_before_request(self):
+        self.assertFalse(_is_public_http_url("http://127.0.0.1/admin"))
+        self.assertFalse(_is_public_http_url("http://localhost/private"))
 
 
 if __name__ == "__main__":
