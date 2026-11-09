@@ -318,10 +318,22 @@ def run_ai_review(
             "doi_checks": [
                 {
                     "doi": item.get("doi"),
+                    "reference": item.get("reference"),
                     "registry_result": item.get("registry_result"),
                     "metadata_comparison": item.get("metadata_comparison"),
                 }
                 for item in citation_verification.get("doi_checks", [])[:20]
+            ],
+            "url_checks": [
+                {
+                    "url": item.get("url"),
+                    "reference": item.get("reference"),
+                    "status": item.get("status"),
+                    "http_status": item.get("http_status"),
+                    "final_url": item.get("final_url"),
+                    "reason": item.get("reason"),
+                }
+                for item in citation_verification.get("url_checks", [])[:20]
             ],
             "limitations": citation_verification.get("limitations", []),
         }
