@@ -412,7 +412,7 @@ export default function ResearchIntegrityPage() {
                                 <ul>{aiReport.limitations.map((limitation, index) => <li key={`ai-limitation-${index}`}>{limitation}</li>)}</ul>
                               </>
                             )}
-                            <p className="muted">Reviewed {formatDate(aiReport.reviewed_at)}. Model-assisted assessment with limited DOI registry checks; not a plagiarism check, complete source-authenticity check, misconduct determination or guarantee of publication.</p>
+                            <p className="muted">Reviewed {formatDate(aiReport.reviewed_at)}. Model-assisted assessment with limited DOI registry and URL accessibility checks; not a plagiarism check, complete source-authenticity check, misconduct determination or guarantee of publication.</p>
                           </div>
                         )}
                       </div>
