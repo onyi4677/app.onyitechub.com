@@ -18,20 +18,20 @@ from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
-YEAR_RE = re.compile(r"\\b((?:19|20)\\d{2})([a-z])?\\b", re.I)
-DOI_RE = re.compile(r"(?:https?://(?:dx\\.)?doi\\.org/)?(10\\.\\d{4,9}/[^\\s<>\\\"]+)", re.I)
-URL_RE = re.compile(r"https?://[^\\s<>\\\"]+", re.I)
-PAREN_CITATION_RE = re.compile(r"\\(([^()]{1,350}?(?:19|20)\\d{2}[a-z]?[^()]*)\\)")
+YEAR_RE = re.compile(r"\b((?:19|20)\d{2})([a-z])?\b", re.I)
+DOI_RE = re.compile(r"(?:https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/[^\s<>\\"]+)", re.I)
+URL_RE = re.compile(r"https?://[^\s<>\\"]+", re.I)
+PAREN_CITATION_RE = re.compile(r"\(([^()]{1,350}?(?:19|20)\d{2}[a-z]?[^()]*)\)")
 NARRATIVE_CITATION_RE = re.compile(
-    r"(?P<author>[A-Z][A-Za-z'’.-]+(?:\\s+(?:et\\s+al\\.?|&\\s+[A-Z][A-Za-z'’.-]+|and\\s+[A-Z][A-Za-z'’.-]+))?)"
-    r"\\s*\\(((?:19|20)\\d{2}[a-z]?)\\)", re.I
+    r"(?P<author>[A-Z][A-Za-z'’.-]+(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z'’.-]+|and\s+[A-Z][A-Za-z'’.-]+))?)"
+    r"\s*\(((?:19|20)\d{2}[a-z]?)\)", re.I
 )
-REFERENCE_HEADING_RE = re.compile(r"^\\s*(references|bibliography|works cited)\\s*$", re.I)
+REFERENCE_HEADING_RE = re.compile(r"^\s*(references|bibliography|works cited)\s*$", re.I)
 REFERENCE_START_RE = re.compile(
-    r"^\\s*(?:\\[?\\d{1,3}\\]?\\.?\\s+)?(.{2,180}?)\\s*\\(((?:19|20)\\d{2}[a-z]?)\\)",
+    r"^\s*(?:\[?\d{1,3}\]?\.?\s+)?(.{2,180}?)\s*\(((?:19|20)\d{2}[a-z]?)\)",
     re.I,
 )
-YEAR_SUFFIX_RE = re.compile(r"\\(((?:19|20)\\d{2}[a-z]?)\\)", re.I)
+YEAR_SUFFIX_RE = re.compile(r"\(((?:19|20)\d{2}[a-z]?)\)", re.I)
 _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _CACHE_LOCK = threading.Lock()
 CACHE_SECONDS = 24 * 60 * 60
@@ -40,14 +40,14 @@ MAX_DOI_LOOKUPS = 10
 
 
 def _clean(value: str) -> str:
-    value = re.sub(r"\\s+", " ", value or "").strip()
+    value = re.sub(r"\s+", " ", value or "").strip()
     return value.rstrip(".,;: ")
 
 
 def _author_key(value: str) -> str:
-    value = re.sub(r"^\\s*\\d+[.)]?\\s*", "", value)
-    value = re.sub(r"\\bet\\s+al\\.?\\b", "", value, flags=re.I)
-    value = re.split(r"\\s+(?:&|and)\\s+", value, maxsplit=1, flags=re.I)[0]
+    value = re.sub(r"^\s*\d+[.)]?\s*", "", value)
+    value = re.sub(r"\bet\s+al\.?\b", "", value, flags=re.I)
+    value = re.split(r"\s+(?:&|and)\s+", value, maxsplit=1, flags=re.I)[0]
     value = re.sub(r"[^A-Za-z'’-]", "", value.split(",")[0] if "," in value else value.split()[0] if value.split() else "")
     return value.casefold()
 
@@ -55,9 +55,9 @@ def _author_key(value: str) -> str:
 def _split_citation_group(group: str) -> list[tuple[str, str]]:
     found: list[tuple[str, str]] = []
     for part in group.split(";"):
-        match = re.search(r"(?P<author>.*?)(?:,\\s*|\\s+) (?P<year>(?:19|20)\\d{2}[a-z]?)$", part.strip(), re.I)
+        match = re.search(r"(?P<author>.*?)(?:,\s*|\s+) (?P<year>(?:19|20)\d{2}[a-z]?)$", part.strip(), re.I)
         if not match:
-            match = re.search(r"(?P<author>.+?)[, ]+(?P<year>(?:19|20)\\d{2}[a-z]?)$", part.strip(), re.I)
+            match = re.search(r"(?P<author>.+?)[, ]+(?P<year>(?:19|20)\d{2}[a-z]?)$", part.strip(), re.I)
         if match:
             author = _author_key(match.group("author"))
             if author:
@@ -85,11 +85,11 @@ def _extract_citations(body: str) -> list[dict[str, str]]:
 
 
 def _reference_entries(text: str) -> tuple[str, list[dict[str, Any]]]:
-    lines = [line.strip() for line in text.replace("\\r", "\\n").splitlines() if line.strip()]
+    lines = [line.strip() for line in text.replace("\r", "\n").splitlines() if line.strip()]
     heading = next((i for i, line in enumerate(lines) if REFERENCE_HEADING_RE.match(line)), None)
     if heading is None:
         return text, []
-    body = "\\n".join(lines[:heading])
+    body = "\n".join(lines[:heading])
     raw_lines = lines[heading + 1:]
     entries: list[str] = []
     for line in raw_lines:
