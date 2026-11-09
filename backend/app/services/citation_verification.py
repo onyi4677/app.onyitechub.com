@@ -26,7 +26,7 @@ DOI_RE = re.compile(r'(?:https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/[^\s<>"\]]+)'
 URL_RE = re.compile(r'https?://[^\s<>"\]]+', re.I)
 PAREN_CITATION_RE = re.compile(r"\(([^()]{1,350}?(?:19|20)\d{2}[a-z]?[^()]*)\)")
 NARRATIVE_CITATION_RE = re.compile(
-    r"(?P<author>[A-Z][A-Za-z'’.-]*(?:\s+(?:[A-Z][A-Za-z'’.-]*|et\s+al\.?)){0,7}(?:['’]s)?)"
+    r"(?P<author>[A-Z][A-Za-z'’.-]*(?:[ \t]+(?:[A-Z][A-Za-z'’.-]*|et[ \t]+al\.?)){0,7}(?:['’]s)?)"
     r"\s*\((?P<year>(?:19|20)\d{2}[a-z]?)\)", re.I
 )
 REFERENCE_HEADING_RE = re.compile(r"^\s*(references|bibliography|works cited)\s*$", re.I)
