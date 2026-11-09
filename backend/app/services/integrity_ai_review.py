@@ -44,7 +44,7 @@ Assess, where relevant:
 - appropriateness and clarity of methodology, sampling, instruments and analysis;
 - unsupported claims, evidence gaps and internal inconsistencies;
 - statistical reporting and interpretation;
-- citation and reference consistency, using the supplied deterministic citation reconciliation and DOI registry evidence where available;
+- citation and reference consistency, using the supplied deterministic citation reconciliation, DOI registry evidence, and URL accessibility evidence where available;
 - academic structure, clarity, repetition and logical flow.
 
 Do not claim that you searched plagiarism databases or established academic
@@ -52,8 +52,10 @@ misconduct. For DOI checks, use only the supplied registry results: distinguish
 a DOI record found in a registry from a metadata match to the cited reference.
 Never describe an unavailable or unverified DOI as verified, and never infer
 that a reference is fabricated merely because it was not found in the checked
-registries. Do not invent references, quotations, findings, statistics, page
-numbers or evidence. Any excerpt you provide must be copied exactly from the
+registries. Treat URL results as HTTP accessibility observations only: an
+accessible URL does not prove source relevance, and an inaccessible or
+unavailable URL does not prove that a source is invalid. Do not invent
+references, quotations, findings, statistics, page numbers or evidence. Any excerpt you provide must be copied exactly from the
 manuscript. Do not assign a plagiarism score, AI-generated-text score, or
 misconduct verdict.
 
@@ -350,7 +352,7 @@ def run_ai_review(
                 "content": [{
                     "text": (
                         "Review the following manuscript according to the system instructions. "
-                        "Use the citation verification evidence below as the factual basis for citation/DOI findings. "
+                        "Use the citation verification evidence below as the factual basis for citation, DOI, and URL findings. "
                         "Do not infer that unverified references are fabricated. Return only the requested JSON object.\n\n"
                         "<CITATION_VERIFICATION_EVIDENCE>\n"
                         + json.dumps(citation_evidence, ensure_ascii=False)
