@@ -24,7 +24,7 @@ URL_RE = re.compile(r'https?://[^\s<>"\]]+', re.I)
 PAREN_CITATION_RE = re.compile(r"\(([^()]{1,350}?(?:19|20)\d{2}[a-z]?[^()]*)\)")
 NARRATIVE_CITATION_RE = re.compile(
     r"(?P<author>[A-Z][A-Za-z'’.-]+(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z'’.-]+|and\s+[A-Z][A-Za-z'’.-]+))?)"
-    r"\s*\(((?:19|20)\d{2}[a-z]?)\)", re.I
+    r"\s*\((?P<year>(?:19|20)\d{2}[a-z]?)\)", re.I
 )
 REFERENCE_HEADING_RE = re.compile(r"^\s*(references|bibliography|works cited)\s*$", re.I)
 REFERENCE_START_RE = re.compile(
@@ -199,7 +199,7 @@ def verify_citations_and_references(
 ) -> dict[str, Any]:
     """Reconcile author-year citations and references; optionally query DOI registries."""
     if not isinstance(manuscript_text, str) or not manuscript_text.strip():
-        return {"status": "not_assessed", "citations": [], "references": [], "findings": [], "summary": "No readable text was available."}
+        return {"status": "not_assessed", "citation_count": 0, "parsed_reference_count": 0, "citations": [], "references": [], "doi_checks": [], "findings": [], "summary": "No readable text was available."}
 
     body, references = _reference_entries(manuscript_text)
     citations = _extract_citations(body)
