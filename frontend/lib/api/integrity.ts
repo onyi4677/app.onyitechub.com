@@ -23,6 +23,8 @@ export type CitationVerificationSummary = {
   unmatched_citation_count?: number;
   uncited_reference_count?: number;
   doi_checked_count?: number;
+  url_checked_count?: number;
+  url_inaccessible_count?: number;
 };
 
 export type CitationVerificationFinding = {
@@ -45,6 +47,16 @@ export type CitationDoiCheck = {
     year?: string;
   };
   metadata_comparison?: string;
+  reference?: string;
+};
+
+export type CitationUrlCheck = {
+  url: string;
+  reference?: string;
+  status?: string;
+  http_status?: number;
+  final_url?: string;
+  reason?: string;
 };
 
 export type CitationVerificationReport = {
@@ -54,6 +66,7 @@ export type CitationVerificationReport = {
   summary?: CitationVerificationSummary | string;
   findings?: CitationVerificationFinding[];
   doi_checks?: CitationDoiCheck[];
+  url_checks?: CitationUrlCheck[];
   limitations?: string[];
 };
 
