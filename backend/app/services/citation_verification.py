@@ -95,7 +95,13 @@ def _extract_citations(body: str) -> list[dict[str, str]]:
                 citations.append({"author_key": author, "year": year, "text": match.group(0), "style": "parenthetical"})
                 seen.add(key)
     for match in NARRATIVE_CITATION_RE.finditer(body):
-        author = _author_key(match.group("author"))
+        raw_author = match.group("author").strip()
+        # The permissive narrative pattern can include leading sentence words.
+        # For possessive forms, the cited author is the final possessive name.
+        possessive = re.search(r"([A-Z][A-Za-z'’.-]*)['’]s$", raw_author, re.I)
+        if possessive:
+            raw_author = possessive.group(1)
+        author = _author_key(raw_author)
         year = match.group("year").casefold()
         key = (author, year, match.group(0))
         if author and key not in seen:
