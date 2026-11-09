@@ -19,8 +19,8 @@ from urllib.request import Request, urlopen
 logger = logging.getLogger(__name__)
 
 YEAR_RE = re.compile(r"\b((?:19|20)\d{2})([a-z])?\b", re.I)
-DOI_RE = re.compile(r"(?:https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/[^\s<>\\"]+)", re.I)
-URL_RE = re.compile(r"https?://[^\s<>\\"]+", re.I)
+DOI_RE = re.compile(r'(?:https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/[^\s<>"\]]+)', re.I)
+URL_RE = re.compile(r'https?://[^\s<>"\]]+', re.I)
 PAREN_CITATION_RE = re.compile(r"\(([^()]{1,350}?(?:19|20)\d{2}[a-z]?[^()]*)\)")
 NARRATIVE_CITATION_RE = re.compile(
     r"(?P<author>[A-Z][A-Za-z'’.-]+(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z'’.-]+|and\s+[A-Z][A-Za-z'’.-]+))?)"
