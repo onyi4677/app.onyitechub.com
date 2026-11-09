@@ -17,7 +17,7 @@ from difflib import SequenceMatcher
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 logger = logging.getLogger(__name__)
 
