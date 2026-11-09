@@ -5,16 +5,19 @@ or prove that a cited work was actually consulted.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
 import re
+import socket
 import threading
 import time
+from difflib import SequenceMatcher
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,7 @@ _CACHE_LOCK = threading.Lock()
 CACHE_SECONDS = 24 * 60 * 60
 HTTP_TIMEOUT = 4
 MAX_DOI_LOOKUPS = 10
+MAX_URL_CHECKS = 8
 
 
 def _clean(value: str) -> str:
@@ -106,10 +110,13 @@ def _reference_entries(text: str) -> tuple[str, list[dict[str, Any]]]:
         year = match.group(2).casefold()
         dois = [m.group(1).rstrip(".,;:)]}") for m in DOI_RE.finditer(entry)]
         urls = [m.group(0).rstrip(".,;:)]}") for m in URL_RE.finditer(entry)]
+        title_match = re.search(r"\)\.\s*(.+?)(?:\.\s+(?=[A-Z][A-Za-z &-]{2,}(?:,|\.)|https?://|doi:)|$)", entry, re.I)
+        title = _clean(title_match.group(1)) if title_match else ""
         parsed.append({
             "text": entry[:500],
             "author_key": author,
             "year": year,
+            "title": title[:300],
             "doi": dois[0] if dois else None,
             "url": urls[0] if urls else None,
         })
@@ -172,23 +179,98 @@ def _registry_lookup(doi: str, registry: str, email: str | None) -> dict[str, An
     return dict(result)
 
 
+def _normalise_title(value: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", (value or "").casefold()))
+
+
 def _metadata_comparison(reference: dict[str, Any], metadata: dict[str, Any]) -> str:
+    """Compare parsed reference fields with registry metadata; never infer a match from DOI presence alone."""
     if metadata.get("status") != "found":
         return "not_verified"
-    ref_title = re.sub(r"[^a-z0-9]", "", reference["text"].casefold())
-    registry_title = re.sub(r"[^a-z0-9]", "", (metadata.get("title") or "").casefold())
+    ref_title = _normalise_title(reference.get("title", ""))
+    registry_title = _normalise_title(metadata.get("title", ""))
     ref_author = reference.get("author_key", "")
-    registry_authors = [_author_key(a) for a in metadata.get("authors", [])]
-    year_match = not metadata.get("year") or metadata["year"] == reference.get("year", "")[:4]
-    author_match = not registry_authors or any(a == ref_author for a in registry_authors)
-    # A title is present in the full reference text; compare a meaningful title fragment
-    # only when a clear match is available, otherwise leave the result partial.
-    title_match = bool(registry_title and registry_title in ref_title)
+    registry_authors = [_author_key(a) for a in metadata.get("authors", []) if a]
+    registry_authors = [a for a in registry_authors if a]
+    registry_year = str(metadata.get("year") or "")[:4]
+    reference_year = str(reference.get("year") or "")[:4]
+
+    author_match = bool(ref_author and registry_authors and ref_author in registry_authors)
+    year_match = bool(registry_year and reference_year and registry_year == reference_year)
+    title_ratio = SequenceMatcher(None, ref_title, registry_title).ratio() if ref_title and registry_title else 0.0
+    title_match = title_ratio >= 0.90
+
     if author_match and year_match and title_match:
         return "verified"
-    if author_match and year_match:
+    if (author_match and year_match) or (author_match and title_match) or (year_match and title_match):
         return "partial_match"
-    return "metadata_mismatch"
+    if ref_title and registry_title and (title_ratio < 0.55 or (registry_year and reference_year and not year_match)):
+        return "metadata_mismatch"
+    return "insufficient_metadata"
+
+
+
+class _PublicOnlyRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _is_public_http_url(newurl):
+            raise URLError("Redirect target is not a public HTTP(S) address")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _is_public_http_url(url: str) -> bool:
+    try:
+        parts = urlsplit(url)
+        if parts.scheme.casefold() not in {"http", "https"} or not parts.hostname:
+            return False
+        if parts.username or parts.password:
+            return False
+        host = parts.hostname.rstrip(".").casefold()
+        if host in {"localhost", "localhost.localdomain"} or host.endswith(".local"):
+            return False
+        try:
+            addresses = [ipaddress.ip_address(host)]
+        except ValueError:
+            addresses = [
+                ipaddress.ip_address(item[4][0])
+                for item in socket.getaddrinfo(host, parts.port or (443 if parts.scheme == "https" else 80), type=socket.SOCK_STREAM)
+            ]
+        return bool(addresses) and all(address.is_global for address in addresses)
+    except (ValueError, OSError, URLError):
+        return False
+
+
+def _check_url(url: str) -> dict[str, Any]:
+    key = "url:" + url
+    now = time.time()
+    with _CACHE_LOCK:
+        cached = _CACHE.get(key)
+        if cached and now - cached[0] < CACHE_SECONDS:
+            return dict(cached[1])
+    if not _is_public_http_url(url):
+        result = {"status": "not_checked", "reason": "unsafe_or_invalid_url"}
+    else:
+        opener = build_opener(_PublicOnlyRedirectHandler())
+        request = Request(url, headers={"User-Agent": "OnyitechResearchWorkspace/1.0", "Range": "bytes=0-0"}, method="HEAD")
+        try:
+            with opener.open(request, timeout=HTTP_TIMEOUT) as response:
+                result = {"status": "accessible", "http_status": response.status, "final_url": response.geturl()}
+        except HTTPError as exc:
+            if exc.code in {405, 501}:
+                try:
+                    get_request = Request(url, headers={"User-Agent": "OnyitechResearchWorkspace/1.0", "Range": "bytes=0-0"}, method="GET")
+                    with opener.open(get_request, timeout=HTTP_TIMEOUT) as response:
+                        result = {"status": "accessible", "http_status": response.status, "final_url": response.geturl()}
+                except HTTPError as get_exc:
+                    result = {"status": "inaccessible", "http_status": get_exc.code}
+                except (URLError, TimeoutError, OSError) as get_exc:
+                    result = {"status": "unavailable", "reason": type(get_exc).__name__}
+            else:
+                result = {"status": "inaccessible", "http_status": exc.code}
+        except (URLError, TimeoutError, OSError) as exc:
+            result = {"status": "unavailable", "reason": type(exc).__name__}
+    with _CACHE_LOCK:
+        _CACHE[key] = (now, result)
+    return dict(result)
 
 
 def verify_citations_and_references(
@@ -246,6 +328,7 @@ def verify_citations_and_references(
         seen_refs.add(key)
 
     doi_checks: list[dict[str, Any]] = []
+    url_checks: list[dict[str, Any]] = []
     if check_external:
         email = crossref_email or os.getenv("CROSSREF_MAILTO")
         doi_references = [reference for reference in references if reference.get("doi")]
@@ -280,6 +363,42 @@ def verify_citations_and_references(
                     "detail": "The DOI resolves to registry metadata that does not agree with the parsed reference author and/or year. Human verification is required.",
                     "source": "registry",
                 })
+            elif comparison == "insufficient_metadata":
+                findings.append({
+                    "rule_id": "reference.doi_metadata_incomplete",
+                    "status": "insufficient_metadata",
+                    "severity": "info",
+                    "doi": doi,
+                    "detail": "The DOI was found, but the available reference and registry fields were insufficient for a reliable metadata match.",
+                    "source": "registry",
+                })
+
+        url_references = [reference for reference in references if reference.get("url")]
+        for reference in url_references[:MAX_URL_CHECKS]:
+            checked = _check_url(reference["url"])
+            url_checks.append({
+                "url": reference["url"],
+                "reference": reference["text"][:300],
+                **checked,
+            })
+            if checked.get("status") == "inaccessible":
+                findings.append({
+                    "rule_id": "reference.url_inaccessible",
+                    "status": "inaccessible",
+                    "severity": "moderate",
+                    "reference": reference["text"][:300],
+                    "detail": "The reference URL returned an HTTP error during this check. Confirm the link manually; access controls and temporary server errors can affect results.",
+                    "source": "url_check",
+                })
+            elif checked.get("status") in {"unavailable", "not_checked"}:
+                findings.append({
+                    "rule_id": "reference.url_not_verified",
+                    "status": "not_verified",
+                    "severity": "info",
+                    "reference": reference["text"][:300],
+                    "detail": "The reference URL could not be safely or reliably checked. This does not mean the source is invalid.",
+                    "source": "url_check",
+                })
 
     return {
         "status": "completed",
@@ -289,6 +408,9 @@ def verify_citations_and_references(
         "citations": citations[:200],
         "references": references[:100],
         "doi_checks": doi_checks[:MAX_DOI_LOOKUPS],
+        "url_checks": url_checks[:MAX_URL_CHECKS],
+        "url_check_limit": MAX_URL_CHECKS,
+        "url_checks_skipped": max(0, sum(1 for r in references if r.get("url")) - len(url_checks)),
         "doi_lookup_limit": MAX_DOI_LOOKUPS,
         "doi_lookups_skipped": max(0, sum(1 for r in references if r.get("doi")) - len(doi_checks)),
         "findings": findings[:100],
@@ -297,12 +419,16 @@ def verify_citations_and_references(
             "unmatched_citation_count": sum(1 for c in citations if (c["author_key"], c["year"]) not in reference_keys),
             "uncited_reference_count": sum(1 for r in references if (r["author_key"], r["year"]) not in citation_keys),
             "doi_checked_count": len(doi_checks),
+            "url_checked_count": len(url_checks),
+            "url_inaccessible_count": sum(1 for item in url_checks if item.get("status") == "inaccessible"),
         },
         "limitations": [
             "Initial reconciliation supports common author-year patterns; numbered styles such as Vancouver are not yet reconciled.",
             "Complex multi-line, footnote, and unusual reference formats may not be parsed.",
             "Registry presence and metadata agreement do not prove that a source was read or that its claims support the manuscript.",
             "A DOI absent from Crossref and DataCite may be registered with another DOI agency.",
+            "URL checks test HTTP accessibility only; they do not establish that a destination is relevant to the cited work.",
+            "External DOI and URL checks are time-limited and capped; some links may remain unverified.",
             "This feature does not compare manuscript passages against a plagiarism corpus.",
         ],
     }
