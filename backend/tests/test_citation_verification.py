@@ -119,6 +119,44 @@ Smith, J. (2021). A relevant research article. Journal of Testing. https://examp
         self.assertFalse(_is_public_http_url("http://127.0.0.1/admin"))
         self.assertFalse(_is_public_http_url("http://localhost/private"))
 
+    @patch("app.services.citation_verification._registry_lookup")
+    def test_uses_datacite_when_crossref_does_not_have_doi(self, registry_lookup):
+        registry_lookup.side_effect = [
+            {"status": "not_found", "registry": "crossref"},
+            {
+                "status": "found",
+                "registry": "datacite",
+                "doi": "10.1234/example",
+                "title": "A relevant research article",
+                "authors": ["Smith"],
+                "year": "2021",
+            },
+        ]
+        manuscript = """Introduction
+A prior study (Smith, 2021).
+
+References
+Smith, J. (2021). A relevant research article. Journal of Testing. https://doi.org/10.1234/example
+"""
+        result = verify_citations_and_references(manuscript, check_external=True)
+        self.assertEqual(result["doi_checks"][0]["registry_result"]["registry"], "datacite")
+        self.assertEqual(result["doi_checks"][0]["metadata_comparison"], "verified")
+        self.assertEqual(registry_lookup.call_count, 2)
+
+    @patch("app.services.citation_verification._check_url")
+    def test_http_error_url_is_reported_as_inaccessible_not_invalid_source(self, check_url):
+        check_url.return_value = {"status": "inaccessible", "http_status": 404}
+        manuscript = """Introduction
+A prior study (Smith, 2021).
+
+References
+Smith, J. (2021). A relevant research article. Journal of Testing. https://example.org/missing
+"""
+        result = verify_citations_and_references(manuscript, check_external=True)
+        finding = next(item for item in result["findings"] if item["rule_id"] == "reference.url_inaccessible")
+        self.assertEqual(finding["status"], "inaccessible")
+        self.assertIn("Confirm the link manually", finding["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()
