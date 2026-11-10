@@ -70,7 +70,7 @@ def _author_key(value: str) -> str:
 
 def _split_citation_group(group: str) -> list[tuple[str, str]]:
     """Parse semicolon-separated author groups and repeated years for one author."""
-    found: list[tuple[str, str]] = []
+    found: list[tuple[str, str, str]] = []
     for part in group.split(";"):
         part = part.strip()
         year_matches = list(YEAR_RE.finditer(part))
@@ -81,7 +81,7 @@ def _split_citation_group(group: str) -> list[tuple[str, str]]:
         author = _author_key(part[:year_matches[0].start()].strip(" ,.;"))
         if author:
             for match in year_matches:
-                found.append((author, match.group(1).casefold()))
+                found.append((author, match.group(1).casefold(), f"({part})"))
     return found
 
 
@@ -89,10 +89,10 @@ def _extract_citations(body: str) -> list[dict[str, str]]:
     citations: list[dict[str, str]] = []
     seen: set[tuple[str, str, str]] = set()
     for match in PAREN_CITATION_RE.finditer(body):
-        for author, year in _split_citation_group(match.group(1)):
-            key = (author, year, match.group(0))
+        for author, year, citation_text in _split_citation_group(match.group(1)):
+            key = (author, year, citation_text)
             if key not in seen:
-                citations.append({"author_key": author, "year": year, "text": match.group(0), "style": "parenthetical"})
+                citations.append({"author_key": author, "year": year, "text": citation_text, "style": "parenthetical"})
                 seen.add(key)
     for match in NARRATIVE_CITATION_RE.finditer(body):
         raw_author = match.group("author").strip()
