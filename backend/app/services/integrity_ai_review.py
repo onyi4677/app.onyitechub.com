@@ -415,10 +415,9 @@ def run_ai_review(
         return {"status": "completed", "finding_count": len(report["findings"])}
 
     except Exception as exc:
-        logger.error(
-            "AI review failed for submission %s (%s)",
+        logger.exception(
+            "AI review failed for submission %s",
             submission_id,
-            type(exc).__name__,
         )
         if lease_owned:
             try:
