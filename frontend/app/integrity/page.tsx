@@ -44,6 +44,7 @@ export default function ResearchIntegrityPage() {
   const [aiReviewingId, setAiReviewingId] = useState("");
   const [aiRefreshingId, setAiRefreshingId] = useState("");
   const [reports, setReports] = useState<Record<string, IntegrityExtractionResult>>({});
+  const [reportLoadErrors, setReportLoadErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -61,11 +62,13 @@ export default function ResearchIntegrityPage() {
       extractedSubmissions.map(async (item) => {
         try {
           const saved = await extractIntegritySubmission(item.submission_id);
-          return [item.submission_id, saved] as const;
-        } catch {
-          // Keep the submission list usable if an individual saved report
-          // cannot be retrieved (for example, an expired or legacy record).
-          return null;
+          return { id: item.submission_id, report: saved, error: "" };
+        } catch (err) {
+          return {
+            id: item.submission_id,
+            report: null,
+            error: err instanceof Error ? err.message : "Unable to reload the saved deterministic report.",
+          };
         }
       })
     );
@@ -73,7 +76,15 @@ export default function ResearchIntegrityPage() {
     setReports((current) => {
       const next = { ...current };
       for (const saved of savedReports) {
-        if (saved) next[saved[0]] = saved[1];
+        if (saved.report) next[saved.id] = saved.report;
+      }
+      return next;
+    });
+    setReportLoadErrors((current) => {
+      const next = { ...current };
+      for (const saved of savedReports) {
+        if (saved.error) next[saved.id] = saved.error;
+        else delete next[saved.id];
       }
       return next;
     });
@@ -300,12 +311,17 @@ export default function ResearchIntegrityPage() {
                     <div className="integrity-status">{item.status.replaceAll("_", " ")}</div>
                     {(item.status === "uploaded" || item.status === "extraction_completed") && (
                       <button className="button primary integrity-check-button" type="button" onClick={() => handleExtract(item.submission_id)} disabled={Boolean(checkingId) || Boolean(deletingId)}>
-                        {checkingId === item.submission_id ? "Checking manuscript..." : reports[item.submission_id] ? "Refresh checks" : item.status === "extraction_completed" ? "View saved checks" : "Run document checks"}
+                        {checkingId === item.submission_id ? "Loading saved checks..." : reports[item.submission_id] ? "Refresh checks" : reportLoadErrors[item.submission_id] ? "Retry loading saved checks" : item.status === "extraction_completed" ? "View saved checks" : "Run document checks"}
                       </button>
+                    )}
+                    {reportLoadErrors[item.submission_id] && !report && (
+                      <div className="notice integrity-error">
+                        Saved deterministic report could not be reloaded: {reportLoadErrors[item.submission_id]}
+                      </div>
                     )}
                     {report && (
                       <div className="integrity-report">
-                        <strong>Initial document report</strong>
+                        <strong>Deterministic structural integrity report</strong>
                         <p className="muted">Extracted text: {report.word_count.toLocaleString()} words · {report.detected_sections.length} detected sections · {report.findings.length} deterministic findings</p>
                         <p className="muted">Word count is calculated from extracted manuscript text and may differ from Microsoft Word's count.</p>
                         {documentType && (
@@ -318,6 +334,23 @@ export default function ResearchIntegrityPage() {
                         {report.assessment_notes?.map((note, index) => (
                           <p className="muted" key={`assessment-note-${index}`}>{note}</p>
                         ))}
+                        {report.findings.map((finding, index) => (
+                          <div className="integrity-finding" key={finding.rule_id + index}>
+                            <strong>{finding.title}</strong>
+                            <span className="integrity-severity">{finding.severity}</span>
+                            <p>{finding.detail}</p>
+                            {finding.evidence && <blockquote>{finding.evidence}</blockquote>}
+                          </div>
+                        ))}
+                        {report.findings.length === 0 && <p>No deterministic flags were raised. This is not a certification of manuscript quality.</p>}
+                        <p className="muted">These checks are preliminary and require human review. They do not detect plagiarism or verify DOI registration.</p>
+                      </div>
+                    )}
+
+                    {citationReport && (
+                      <div className="integrity-report integrity-citation-report">
+                        <strong>Deterministic citation and reference verification</strong>
+                        <p className="muted">This assessment is generated from the extracted manuscript and remains separate from the AI academic review.</p>
                         {citationReport && (
                           <div className="integrity-classification">
                             <strong>Citation and reference matching</strong>
@@ -343,18 +376,9 @@ export default function ResearchIntegrityPage() {
                             ))}
                           </div>
                         )}
-                        {report.findings.map((finding, index) => (
-                          <div className="integrity-finding" key={finding.rule_id + index}>
-                            <strong>{finding.title}</strong>
-                            <span className="integrity-severity">{finding.severity}</span>
-                            <p>{finding.detail}</p>
-                            {finding.evidence && <blockquote>{finding.evidence}</blockquote>}
-                          </div>
-                        ))}
-                        {report.findings.length === 0 && <p>No deterministic flags were raised. This is not a certification of manuscript quality.</p>}
-                        <p className="muted">These checks are preliminary and require human review. They do not detect plagiarism or verify DOI registration.</p>
                       </div>
                     )}
+
 
                     {item.status === "extraction_completed" && (
                       <div className="integrity-ai-review">
@@ -384,7 +408,7 @@ export default function ResearchIntegrityPage() {
                         )}
                         {aiReport && (
                           <div className="integrity-report">
-                            <strong>AI-assisted academic review</strong>
+                            <strong>AI-assisted academic review (supplementary assessment)</strong>
                             <p className="muted">Document type: {aiReport.document_type} · Academic level: {aiReport.academic_level}</p>
                             <p>{aiReport.summary}</p>
                             <p className="muted">
@@ -393,7 +417,7 @@ export default function ResearchIntegrityPage() {
                             </p>
                             {aiCitation && (
                               <div className="integrity-classification">
-                                <strong>Citation and reference verification summary</strong>
+                                <strong>AI review: registry and URL verification details</strong>
                                 {aiCitation.summary && typeof aiCitation.summary === "object" ? (
                                   <>
                                     <p className="muted">
