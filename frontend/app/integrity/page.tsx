@@ -361,34 +361,69 @@ export default function ResearchIntegrityPage() {
                             <p>{aiReport.summary}</p>
                             {aiCitation && (
                               <div className="integrity-classification">
-                                <strong>External DOI registry and URL checks</strong>
-                                <p className="muted">
-                                  {aiCitation.doi_checks?.length || 0} DOI records checked against Crossref and, when not found there, DataCite.
-                                </p>
-                                <p className="muted">
-                                  {aiCitation.doi_checks?.length || 0} DOI records checked · {aiCitation.url_checks?.length || 0} reference URLs checked · {(aiCitation.url_checks || []).filter((check) => check.status === "inaccessible").length} URLs returned HTTP errors.
-                                </p>
-                                {aiCitation.doi_checks?.map((check, index) => (
-                                  <div className="integrity-finding" key={`doi-check-${index}`}>
-                                    <strong>{check.doi}</strong>
-                                    <span className="integrity-severity">{check.metadata_comparison?.replaceAll("_", " ") || "not verified"}</span>
+                                <strong>Citation and reference verification summary</strong>
+                                {aiCitation.summary && typeof aiCitation.summary === "object" ? (
+                                  <>
                                     <p className="muted">
-                                      Registry: {check.registry_result?.registry || "unknown"} · Record status: {check.registry_result?.status || "unavailable"}
+                                      {aiCitation.citation_count ?? 0} in-text citations detected · {aiCitation.parsed_reference_count ?? 0} reference entries parsed
                                     </p>
-                                    {check.registry_result?.title && <p>{check.registry_result.title}</p>}
-                                    {check.registry_result?.year && <p className="muted">Registry publication year: {check.registry_result.year}</p>}
-                                  </div>
-                                ))}
-                                {aiCitation.url_checks?.map((check, index) => (
-                                  <div className="integrity-finding" key={`url-check-${index}`}>
-                                    <strong>{check.url}</strong>
-                                    <span className="integrity-severity">{check.status?.replaceAll("_", " ") || "not verified"}</span>
-                                    <p className="muted">
-                                      {check.http_status ? `HTTP ${check.http_status}` : "No HTTP response"}{check.final_url && check.final_url !== check.url ? ` · Redirected to ${check.final_url}` : ""}
-                                    </p>
-                                    {check.reason && <p className="muted">{check.reason}</p>}
-                                  </div>
-                                ))}
+                                    <div className="integrity-citation-stats">
+                                      <div className="integrity-citation-stat"><span>Matched citations</span><strong>{aiCitation.summary.matched_citation_count ?? 0}</strong></div>
+                                      <div className="integrity-citation-stat"><span>Unmatched citations</span><strong>{aiCitation.summary.unmatched_citation_count ?? 0}</strong></div>
+                                      <div className="integrity-citation-stat"><span>Uncited references</span><strong>{aiCitation.summary.uncited_reference_count ?? 0}</strong></div>
+                                      <div className="integrity-citation-stat"><span>Possible duplicates</span><strong>{(aiCitation.findings || []).filter((finding) => finding.rule_id === "reference.possible_duplicate").length}</strong></div>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <p className="muted">Citation matching could not be assessed from the extracted text.</p>
+                                )}
+                                <p className="muted">
+                                  DOI records checked: {aiCitation.summary && typeof aiCitation.summary === "object" ? aiCitation.summary.doi_checked_count ?? aiCitation.doi_checks?.length ?? 0 : aiCitation.doi_checks?.length ?? 0}
+                                  {" · "}Reference URLs checked: {aiCitation.summary && typeof aiCitation.summary === "object" ? aiCitation.summary.url_checked_count ?? aiCitation.url_checks?.length ?? 0 : aiCitation.url_checks?.length ?? 0}
+                                  {" · "}URLs returning HTTP errors: {aiCitation.summary && typeof aiCitation.summary === "object" ? aiCitation.summary.url_inaccessible_count ?? 0 : (aiCitation.url_checks || []).filter((check) => check.status === "inaccessible").length}
+                                </p>
+                                {(aiCitation.findings || []).filter((finding) => ["citation.reference_missing", "reference.not_cited", "reference.possible_duplicate"].includes(finding.rule_id)).length > 0 && (
+                                  <>
+                                    <strong>Reconciliation findings</strong>
+                                    {(aiCitation.findings || []).filter((finding) => ["citation.reference_missing", "reference.not_cited", "reference.possible_duplicate"].includes(finding.rule_id)).map((finding, index) => (
+                                      <div className="integrity-finding" key={`reconciliation-${finding.rule_id}-${index}`}>
+                                        <strong>{finding.rule_id.replaceAll(".", " ")}</strong>
+                                        <span className="integrity-severity">{finding.severity}</span>
+                                        <p>{finding.detail}</p>
+                                        {finding.citation && <blockquote>{finding.citation}</blockquote>}
+                                        {finding.reference && <blockquote>{finding.reference}</blockquote>}
+                                      </div>
+                                    ))}
+                                  </>
+                                )}
+                                {aiCitation.doi_checks?.length ? (
+                                  <>
+                                    <strong>DOI registry checks</strong>
+                                    <p className="muted">DOIs are checked against Crossref and, when not found there, DataCite. Registry presence alone does not prove that a source supports the manuscript's claim.</p>
+                                    {aiCitation.doi_checks.map((check, index) => (
+                                      <div className="integrity-finding" key={`doi-check-${index}`}>
+                                        <strong>{check.doi}</strong>
+                                        <span className="integrity-severity">{check.metadata_comparison?.replaceAll("_", " ") || "not verified"}</span>
+                                        <p className="muted">Registry: {check.registry_result?.registry || "unknown"} · Record status: {check.registry_result?.status || "unavailable"}</p>
+                                        {check.registry_result?.title && <p>{check.registry_result.title}</p>}
+                                        {check.registry_result?.year && <p className="muted">Registry publication year: {check.registry_result.year}</p>}
+                                      </div>
+                                    ))}
+                                  </>
+                                ) : <p className="muted">No DOI records were checked in this review.</p>}
+                                {aiCitation.url_checks?.length ? (
+                                  <>
+                                    <strong>Reference URL accessibility</strong>
+                                    {aiCitation.url_checks.map((check, index) => (
+                                      <div className="integrity-finding" key={`url-check-${index}`}>
+                                        <strong>{check.url}</strong>
+                                        <span className="integrity-severity">{check.status?.replaceAll("_", " ") || "not verified"}</span>
+                                        <p className="muted">{check.http_status ? `HTTP ${check.http_status}` : "No HTTP response"}{check.final_url && check.final_url !== check.url ? ` · Redirected to ${check.final_url}` : ""}</p>
+                                        {check.reason && <p className="muted">{check.reason}</p>}
+                                      </div>
+                                    ))}
+                                  </>
+                                ) : <p className="muted">No reference URLs were checked in this review.</p>}
                                 {aiCitation.limitations?.map((limitation, index) => (
                                   <p className="muted" key={`ai-citation-limit-${index}`}>{limitation}</p>
                                 ))}
