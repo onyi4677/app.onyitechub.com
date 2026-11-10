@@ -78,6 +78,43 @@ class DeterministicCitationFindingTests(unittest.TestCase):
             ["The source does not state the sampling frame."],
         )
 
+    def test_removes_all_segment_scoped_limitations_from_full_report(self):
+        reports = [
+            {
+                "summary": "Opening reviewed.",
+                "document_type": "Review paper",
+                "academic_level": "Not specified",
+                "findings": [],
+                "limitations": [
+                    "The segment does not provide sufficient detail to assess methodology.",
+                    "The review is limited to the provided segment; full manuscript context may affect findings.",
+                    "This review is limited to the provided References segment and does not assess other sections.",
+                    "Reference list and full citation details are not included in this segment.",
+                    "The review is limited by the absence of a reproducible search history.",
+                ],
+            },
+            {
+                "summary": "Discussion reviewed.",
+                "document_type": "Review paper",
+                "academic_level": "Not specified",
+                "findings": [],
+                "limitations": [
+                    "Review is limited to the provided segment; broader manuscript context may affect findings.",
+                    "The geographic restriction to North-East Nigeria excludes potentially relevant evidence.",
+                ],
+            },
+        ]
+
+        result = _combine_chunk_reports(reports, expected_segment_count=2)
+
+        self.assertEqual(
+            result["limitations"],
+            [
+                "The review is limited by the absence of a reproducible search history.",
+                "The geographic restriction to North-East Nigeria excludes potentially relevant evidence.",
+            ],
+        )
+
     def test_refuses_to_consolidate_an_incomplete_segment_review(self):
         with self.assertRaisesRegex(ValueError, "1 of 2 segments"):
             _combine_chunk_reports(
