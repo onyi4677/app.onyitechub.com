@@ -27,7 +27,8 @@ AI_REVIEW_MODEL_ID = os.getenv(
 )
 MAX_AI_REVIEW_CHARS = 150_000
 MAX_AI_CHUNK_CHARS = 30_000
-MAX_AI_OUTPUT_TOKENS = 3_000
+MAX_AI_OUTPUT_TOKENS = 8_000
+MAX_AI_RETRY_OUTPUT_TOKENS = 16_000
 MAX_AI_FINDINGS = 30
 
 SYSTEM_INSTRUCTIONS = """
@@ -281,7 +282,9 @@ def _request_ai_review_chunk(
         "that it belongs to a larger manuscript. Do not claim that material is "
         "missing merely because it may appear in another segment. Use the citation "
         "verification evidence as the factual basis for citation, DOI, and URL "
-        "observations. Return only the requested JSON object.\n\n"
+        "observations. Return only the requested JSON object. Keep the summary and "
+        "each finding concise; return no more than 8 findings for this segment. "
+        "Ensure every JSON string is closed and the JSON object is complete.\n\n"
         "<CITATION_VERIFICATION_EVIDENCE>\n"
         + json.dumps(citation_evidence, ensure_ascii=False)
         + "\n</CITATION_VERIFICATION_EVIDENCE>\n\n"
@@ -289,22 +292,76 @@ def _request_ai_review_chunk(
         + chunk["text"]
         + "\n</MANUSCRIPT_SEGMENT>"
     )
-    response = bedrock.converse(
-        modelId=AI_REVIEW_MODEL_ID,
-        system=[{"text": SYSTEM_INSTRUCTIONS}],
-        messages=[{"role": "user", "content": [{"text": prompt}]}],
-        inferenceConfig={"maxTokens": MAX_AI_OUTPUT_TOKENS, "temperature": 0},
-    )
-    blocks = response.get("output", {}).get("message", {}).get("content", [])
-    raw_text = "\n".join(
-        block["text"] for block in blocks
-        if isinstance(block, dict) and isinstance(block.get("text"), str)
-    )
-    if not raw_text:
-        raise ValueError(
-            f"The AI review returned an empty response for segment {chunk_index}."
+    messages = [{"role": "user", "content": [{"text": prompt}]}]
+    token_limits = (MAX_AI_OUTPUT_TOKENS, MAX_AI_RETRY_OUTPUT_TOKENS)
+    last_parse_error: ValueError | None = None
+
+    for attempt, token_limit in enumerate(token_limits, start=1):
+        attempt_messages = messages
+        if attempt > 1:
+            retry_prompt = (
+                "Your previous response was incomplete or invalid. Return a complete, "
+                "syntactically valid JSON object matching the required schema. Be concise, "
+                "include no more than 5 highest-priority findings for this segment, "
+                "and close every string, array, and object. Do not use Markdown fences.\n\n"
+                + prompt
+            )
+            attempt_messages = [
+                {"role": "user", "content": [{"text": retry_prompt}]}
+            ]
+
+        response = bedrock.converse(
+            modelId=AI_REVIEW_MODEL_ID,
+            system=[{"text": SYSTEM_INSTRUCTIONS}],
+            messages=attempt_messages,
+            inferenceConfig={"maxTokens": token_limit, "temperature": 0},
         )
-    return _parse_report(raw_text, chunk["text"])
+        stop_reason = response.get("stopReason", "unknown")
+        usage = response.get("usage", {})
+        logger.info(
+            "Bedrock AI review segment %s/%s attempt %s: stop_reason=%s input_tokens=%s output_tokens=%s max_tokens=%s",
+            chunk_index,
+            chunk_count,
+            attempt,
+            stop_reason,
+            usage.get("inputTokens", "unknown"),
+            usage.get("outputTokens", "unknown"),
+            token_limit,
+        )
+
+        blocks = response.get("output", {}).get("message", {}).get("content", [])
+        raw_text = "\n".join(
+            block["text"] for block in blocks
+            if isinstance(block, dict) and isinstance(block.get("text"), str)
+        )
+        if not raw_text:
+            last_parse_error = ValueError(
+                f"The AI review returned an empty response for segment {chunk_index}."
+            )
+        else:
+            try:
+                parsed_report = _parse_report(raw_text, chunk["text"])
+            except ValueError as exc:
+                last_parse_error = exc
+            else:
+                if stop_reason == "max_tokens":
+                    last_parse_error = ValueError(
+                        f"The AI review response for segment {chunk_index} reached the output-token limit."
+                    )
+                else:
+                    return parsed_report
+
+        if attempt == 1:
+            logger.warning(
+                "Retrying AI review segment %s/%s after incomplete response (stop_reason=%s).",
+                chunk_index,
+                chunk_count,
+                stop_reason,
+            )
+
+    raise last_parse_error or ValueError(
+        f"The AI review could not produce a complete response for segment {chunk_index}."
+    )
 
 
 def _combine_chunk_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
