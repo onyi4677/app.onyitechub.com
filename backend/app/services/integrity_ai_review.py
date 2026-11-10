@@ -25,7 +25,8 @@ AI_REVIEW_MODEL_ID = os.getenv(
     "INTEGRITY_AI_MODEL_ID",
     "us.amazon.nova-2-lite-v1:0",
 )
-MAX_AI_REVIEW_CHARS = 50_000
+MAX_AI_REVIEW_CHARS = 150_000
+MAX_AI_CHUNK_CHARS = 30_000
 MAX_AI_OUTPUT_TOKENS = 3_000
 MAX_AI_FINDINGS = 30
 
@@ -186,6 +187,163 @@ def _enforce_deterministic_citation_findings(
         report["limitations"] = report["limitations"][:21]
     return report
 
+
+
+def _looks_like_section_heading(line: str) -> bool:
+    """Recognize common academic headings without requiring a fixed template."""
+    value = line.strip()
+    if not value or len(value) > 180:
+        return False
+    lowered = value.lower().strip(" .:")
+    if re.match(
+        r"^(?:(?:chapter|section)\s+\d+|\d+(?:\.\d+)*[.)]?\s+)",
+        lowered,
+    ):
+        return True
+    known = (
+        "abstract", "keywords", "introduction", "background",
+        "problem statement", "purpose of the study", "aim of the study",
+        "research objectives", "research questions", "hypotheses",
+        "literature review", "theoretical framework", "conceptual framework",
+        "methodology", "methods", "research methods", "study design",
+        "results", "findings", "discussion", "conclusion", "conclusions",
+        "recommendations", "limitations", "references", "bibliography",
+        "acknowledgements", "appendix", "appendices",
+    )
+    if lowered in known:
+        return True
+    letters = [char for char in value if char.isalpha()]
+    return bool(letters) and len(value) <= 120 and value.upper() == value and len(letters) >= 4
+
+
+def _split_manuscript_into_sections(
+    manuscript_text: str,
+    max_chars: int = MAX_AI_CHUNK_CHARS,
+) -> list[dict[str, str]]:
+    """Split at academic section and paragraph boundaries; never discard text."""
+    paragraphs = manuscript_text.splitlines()
+    chunks: list[dict[str, str]] = []
+    current_lines: list[str] = []
+    current_chars = 0
+    current_section = "Opening / unsectioned content"
+    current_chunk_section = current_section
+
+    def flush() -> None:
+        nonlocal current_lines, current_chars, current_chunk_section
+        body = "\n".join(current_lines).strip()
+        if body:
+            chunks.append({"section": current_chunk_section, "text": body})
+        current_lines = []
+        current_chars = 0
+        current_chunk_section = current_section
+
+    for raw_line in paragraphs:
+        line = raw_line.strip()
+        if not line:
+            continue
+        is_heading = _looks_like_section_heading(line)
+        if is_heading:
+            current_section = line[:180]
+            if current_lines and current_chars >= max_chars // 2:
+                flush()
+            if not current_lines:
+                current_chunk_section = current_section
+
+        pieces = [line]
+        if len(line) > max_chars:
+            pieces = [
+                line[index:index + max_chars]
+                for index in range(0, len(line), max_chars)
+            ]
+
+        for piece in pieces:
+            if current_lines and current_chars + len(piece) + 1 > max_chars:
+                flush()
+                current_chunk_section = current_section
+            current_lines.append(piece)
+            current_chars += len(piece) + 1
+
+    flush()
+    return chunks
+
+
+def _request_ai_review_chunk(
+    bedrock: Any,
+    chunk: dict[str, str],
+    chunk_index: int,
+    chunk_count: int,
+    citation_evidence: dict[str, Any],
+) -> dict[str, Any]:
+    prompt = (
+        "Review this part of a larger academic manuscript. This is section-aware "
+        f"segment {chunk_index} of {chunk_count}; its section context is "
+        f"{chunk['section']!r}. Review only the supplied segment, while considering "
+        "that it belongs to a larger manuscript. Do not claim that material is "
+        "missing merely because it may appear in another segment. Use the citation "
+        "verification evidence as the factual basis for citation, DOI, and URL "
+        "observations. Return only the requested JSON object.\n\n"
+        "<CITATION_VERIFICATION_EVIDENCE>\n"
+        + json.dumps(citation_evidence, ensure_ascii=False)
+        + "\n</CITATION_VERIFICATION_EVIDENCE>\n\n"
+        "<MANUSCRIPT_SEGMENT>\n"
+        + chunk["text"]
+        + "\n</MANUSCRIPT_SEGMENT>"
+    )
+    response = bedrock.converse(
+        modelId=AI_REVIEW_MODEL_ID,
+        system=[{"text": SYSTEM_INSTRUCTIONS}],
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"maxTokens": MAX_AI_OUTPUT_TOKENS, "temperature": 0},
+    )
+    blocks = response.get("output", {}).get("message", {}).get("content", [])
+    raw_text = "\n".join(
+        block["text"] for block in blocks
+        if isinstance(block, dict) and isinstance(block.get("text"), str)
+    )
+    if not raw_text:
+        raise ValueError(
+            f"The AI review returned an empty response for segment {chunk_index}."
+        )
+    return _parse_report(raw_text, chunk["text"])
+
+
+def _combine_chunk_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    """Combine segment reviews into one report while removing repeated findings."""
+    findings: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    limitations: list[str] = []
+    summaries: list[str] = []
+
+    for report in reports:
+        summary = report.get("summary", "").strip()
+        if summary and summary not in summaries:
+            summaries.append(summary)
+        for finding in report.get("findings", []):
+            signature = (
+                finding.get("category", ""),
+                finding.get("excerpt", "").strip(),
+                finding.get("explanation", "").strip(),
+            )
+            if signature not in seen:
+                seen.add(signature)
+                findings.append(finding)
+            if len(findings) >= MAX_AI_FINDINGS:
+                break
+        for limitation in report.get("limitations", []):
+            if limitation not in limitations:
+                limitations.append(limitation)
+
+    first = reports[0] if reports else {}
+    return {
+        "summary": " ".join(summaries)[:3_000] or "The manuscript segments were reviewed.",
+        "document_type": first.get("document_type", "Not specified"),
+        "academic_level": first.get("academic_level", "Not specified"),
+        "findings": findings[:MAX_AI_FINDINGS],
+        "limitations": limitations[:20],
+        "model_id": AI_REVIEW_MODEL_ID,
+        "reviewed_at": _now(),
+        "review_segments": len(reports),
+    }
 
 def _set_terminal_status(
     table: Any,
@@ -370,40 +528,30 @@ def run_ai_review(
             "bedrock-runtime",
             region_name=os.getenv("AWS_REGION", "us-east-1"),
         )
-        response = bedrock.converse(
-            modelId=AI_REVIEW_MODEL_ID,
-            system=[{"text": SYSTEM_INSTRUCTIONS}],
-            messages=[{
-                "role": "user",
-                "content": [{
-                    "text": (
-                        "Review the following manuscript according to the system instructions. "
-                        "Use the citation verification evidence below as the factual basis for citation, DOI, and URL findings. "
-                        "Do not infer that unverified references are fabricated. Return only the requested JSON object.\n\n"
-                        "<CITATION_VERIFICATION_EVIDENCE>\n"
-                        + json.dumps(citation_evidence, ensure_ascii=False)
-                        + "\n</CITATION_VERIFICATION_EVIDENCE>\n\n"
-                        "<MANUSCRIPT>\n"
-                        + manuscript_text
-                        + "\n</MANUSCRIPT>"
-                    )
-                }],
-            }],
-            inferenceConfig={
-                "maxTokens": MAX_AI_OUTPUT_TOKENS,
-                "temperature": 0,
-            },
-        )
+        chunks = _split_manuscript_into_sections(manuscript_text)
+        if not chunks:
+            raise ValueError("The manuscript could not be divided into reviewable sections.")
 
-        blocks = response.get("output", {}).get("message", {}).get("content", [])
-        raw_text = "\n".join(
-            block["text"] for block in blocks
-            if isinstance(block, dict) and isinstance(block.get("text"), str)
-        )
-        if not raw_text:
-            raise ValueError("The AI review returned an empty response.")
+        chunk_reports = []
+        for index, chunk in enumerate(chunks, start=1):
+            logger.info(
+                "Reviewing manuscript segment %s/%s for submission %s (%s characters)",
+                index,
+                len(chunks),
+                submission_id,
+                len(chunk["text"]),
+            )
+            chunk_reports.append(
+                _request_ai_review_chunk(
+                    bedrock,
+                    chunk,
+                    index,
+                    len(chunks),
+                    citation_evidence,
+                )
+            )
 
-        report = _parse_report(raw_text, manuscript_text)
+        report = _combine_chunk_reports(chunk_reports)
         report = _enforce_deterministic_citation_findings(report, citation_evidence)
         report["citation_verification"] = citation_evidence
         saved = _set_terminal_status(
