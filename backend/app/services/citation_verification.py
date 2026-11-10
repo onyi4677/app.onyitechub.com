@@ -53,7 +53,6 @@ def _author_key(value: str) -> str:
     value = re.sub(r"^\s*\d+[.)]?\s*", "", value)
     value = re.sub(r"\bet\s+al\.?\b", "", value, flags=re.I)
     value = re.sub(r"['’]s\s*$", "", value.strip(), flags=re.I)
-    value = re.split(r"\s+(?:&|and)\s+", value, maxsplit=1, flags=re.I)[0]
     value = value.strip(" ,.;")
     # Corporate authors are multi-word names; reducing them to the first word
     # creates collisions (e.g. Federal Ministry vs Federal Government).
@@ -64,6 +63,7 @@ def _author_key(value: str) -> str:
     )
     if any(term in value.casefold() for term in corporate_terms):
         return " ".join(re.findall(r"[A-Za-z0-9]+", value.casefold()))
+    value = re.split(r"\\s+(?:&|and)\\s+", value, maxsplit=1, flags=re.I)[0]
     first = value.split(",")[0] if "," in value else (value.split()[0] if value.split() else "")
     return re.sub(r"[^A-Za-z0-9]", "", first).casefold()
 
