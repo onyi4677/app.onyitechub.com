@@ -10,6 +10,8 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 
+from app.services.citation_verification import verify_citations_and_references
+
 from app.services.integrity_submissions import (
     _now,
     _now_epoch,
@@ -23,8 +25,10 @@ AI_REVIEW_MODEL_ID = os.getenv(
     "INTEGRITY_AI_MODEL_ID",
     "us.amazon.nova-2-lite-v1:0",
 )
-MAX_AI_REVIEW_CHARS = 50_000
-MAX_AI_OUTPUT_TOKENS = 3_000
+MAX_AI_REVIEW_CHARS = 150_000
+MAX_AI_CHUNK_CHARS = 30_000
+MAX_AI_OUTPUT_TOKENS = 8_000
+MAX_AI_RETRY_OUTPUT_TOKENS = 16_000
 MAX_AI_FINDINGS = 30
 
 SYSTEM_INSTRUCTIONS = """
@@ -42,14 +46,20 @@ Assess, where relevant:
 - appropriateness and clarity of methodology, sampling, instruments and analysis;
 - unsupported claims, evidence gaps and internal inconsistencies;
 - statistical reporting and interpretation;
-- citation and reference consistency, including apparent DOI formatting issues;
+- citation and reference consistency, using the supplied deterministic citation reconciliation, DOI registry evidence, and URL accessibility evidence where available. For citation/reference mismatch findings, report only exact unmatched citation strings present in deterministic evidence. Do not independently infer missing references from the manuscript; do not repeat a grouped citation warning when the deterministic evidence does not flag it. Do not state numerical citation or reference counts in the narrative summary; exact counts are calculated deterministically and displayed separately.
 - academic structure, clarity, repetition and logical flow.
 
-Do not claim that you searched plagiarism databases, verified source existence,
-confirmed DOI registration, or established academic misconduct. Do not invent
-references, quotations, findings, statistics, page numbers or evidence. Any
-excerpt you provide must be copied exactly from the manuscript. Do not assign
-a plagiarism score, AI-generated-text score, or misconduct verdict.
+Do not claim that you searched plagiarism databases or established academic
+misconduct. For DOI checks, use only the supplied registry results: distinguish
+a DOI record found in a registry from a metadata match to the cited reference.
+Never describe an unavailable or unverified DOI as verified, and never infer
+that a reference is fabricated merely because it was not found in the checked
+registries. Treat URL results as HTTP accessibility observations only: an
+accessible URL does not prove source relevance, and an inaccessible or
+unavailable URL does not prove that a source is invalid. Do not invent
+references, quotations, findings, statistics, page numbers or evidence. Any excerpt you provide must be copied exactly from the
+manuscript. Do not assign a plagiarism score, AI-generated-text score, or
+misconduct verdict.
 
 Return only valid JSON with this structure:
 {
@@ -154,6 +164,265 @@ def _parse_report(raw_text: str, manuscript_text: str) -> dict[str, Any]:
         "reviewed_at": _now(),
     }
 
+
+def _enforce_deterministic_citation_findings(
+    report: dict[str, Any], citation_evidence: dict[str, Any]
+) -> dict[str, Any]:
+    """Prevent the model from inventing or duplicating citation mismatch findings."""
+    unmatched = {
+        str(item.get("citation", "")).strip()
+        for item in citation_evidence.get("findings", [])
+        if item.get("rule_id") == "citation.reference_missing" and item.get("citation")
+    }
+    original = report.get("findings", [])
+    filtered = [
+        item for item in original
+        if item.get("category") != "citation" or item.get("excerpt", "").strip() in unmatched
+    ]
+    removed = len(original) - len(filtered)
+    report["findings"] = filtered
+    if removed:
+        report.setdefault("limitations", []).append(
+            f"{removed} AI-generated citation finding(s) were omitted because they were not confirmed by deterministic citation reconciliation."
+        )
+        report["limitations"] = report["limitations"][:21]
+    return report
+
+
+
+def _looks_like_section_heading(line: str) -> bool:
+    """Recognize common academic headings without requiring a fixed template."""
+    value = line.strip()
+    if not value or len(value) > 180:
+        return False
+    lowered = value.lower().strip(" .:")
+    if re.match(
+        r"^(?:(?:chapter|section)\s+\d+|\d+(?:\.\d+)*[.)]?\s+)",
+        lowered,
+    ):
+        return True
+    known = (
+        "abstract", "keywords", "introduction", "background",
+        "problem statement", "purpose of the study", "aim of the study",
+        "research objectives", "research questions", "hypotheses",
+        "literature review", "theoretical framework", "conceptual framework",
+        "methodology", "methods", "research methods", "study design",
+        "results", "findings", "discussion", "conclusion", "conclusions",
+        "recommendations", "limitations", "references", "bibliography",
+        "acknowledgements", "appendix", "appendices",
+    )
+    if lowered in known:
+        return True
+    letters = [char for char in value if char.isalpha()]
+    return bool(letters) and len(value) <= 120 and value.upper() == value and len(letters) >= 4
+
+
+def _split_manuscript_into_sections(
+    manuscript_text: str,
+    max_chars: int = MAX_AI_CHUNK_CHARS,
+) -> list[dict[str, str]]:
+    """Split at academic section and paragraph boundaries; never discard text."""
+    paragraphs = manuscript_text.splitlines()
+    chunks: list[dict[str, str]] = []
+    current_lines: list[str] = []
+    current_chars = 0
+    current_section = "Opening / unsectioned content"
+    current_chunk_section = current_section
+
+    def flush() -> None:
+        nonlocal current_lines, current_chars, current_chunk_section
+        body = "\n".join(current_lines).strip()
+        if body:
+            chunks.append({"section": current_chunk_section, "text": body})
+        current_lines = []
+        current_chars = 0
+        current_chunk_section = current_section
+
+    for raw_line in paragraphs:
+        line = raw_line.strip()
+        if not line:
+            continue
+        is_heading = _looks_like_section_heading(line)
+        if is_heading:
+            if current_lines and current_chars >= max_chars // 2:
+                flush()
+            current_section = line[:180]
+            if not current_lines:
+                current_chunk_section = current_section
+
+        pieces = [line]
+        if len(line) > max_chars:
+            pieces = [
+                line[index:index + max_chars]
+                for index in range(0, len(line), max_chars)
+            ]
+
+        for piece in pieces:
+            if current_lines and current_chars + len(piece) + 1 > max_chars:
+                flush()
+                current_chunk_section = current_section
+            current_lines.append(piece)
+            current_chars += len(piece) + 1
+
+    flush()
+    return chunks
+
+
+def _request_ai_review_chunk(
+    bedrock: Any,
+    chunk: dict[str, str],
+    chunk_index: int,
+    chunk_count: int,
+    citation_evidence: dict[str, Any],
+) -> dict[str, Any]:
+    prompt = (
+        "Review this part of a larger academic manuscript. This is section-aware "
+        f"segment {chunk_index} of {chunk_count}; its section context is "
+        f"{chunk['section']!r}. Review only the supplied segment, while considering "
+        "that it belongs to a larger manuscript. Do not claim that material is "
+        "missing merely because it may appear in another segment. Use the citation "
+        "verification evidence as the factual basis for citation, DOI, and URL "
+        "observations. Return only the requested JSON object. Keep the summary and "
+        "each finding concise; return no more than 8 findings for this segment. "
+        "Ensure every JSON string is closed and the JSON object is complete.\n\n"
+        "<CITATION_VERIFICATION_EVIDENCE>\n"
+        + json.dumps(citation_evidence, ensure_ascii=False)
+        + "\n</CITATION_VERIFICATION_EVIDENCE>\n\n"
+        "<MANUSCRIPT_SEGMENT>\n"
+        + chunk["text"]
+        + "\n</MANUSCRIPT_SEGMENT>"
+    )
+    messages = [{"role": "user", "content": [{"text": prompt}]}]
+    token_limits = (MAX_AI_OUTPUT_TOKENS, MAX_AI_RETRY_OUTPUT_TOKENS)
+    last_parse_error: ValueError | None = None
+
+    for attempt, token_limit in enumerate(token_limits, start=1):
+        attempt_messages = messages
+        if attempt > 1:
+            retry_prompt = (
+                "Your previous response was incomplete or invalid. Return a complete, "
+                "syntactically valid JSON object matching the required schema. Be concise, "
+                "include no more than 5 highest-priority findings for this segment, "
+                "and close every string, array, and object. Do not use Markdown fences.\n\n"
+                + prompt
+            )
+            attempt_messages = [
+                {"role": "user", "content": [{"text": retry_prompt}]}
+            ]
+
+        response = bedrock.converse(
+            modelId=AI_REVIEW_MODEL_ID,
+            system=[{"text": SYSTEM_INSTRUCTIONS}],
+            messages=attempt_messages,
+            inferenceConfig={"maxTokens": token_limit, "temperature": 0},
+        )
+        stop_reason = response.get("stopReason", "unknown")
+        usage = response.get("usage", {})
+        logger.info(
+            "Bedrock AI review segment %s/%s attempt %s: stop_reason=%s input_tokens=%s output_tokens=%s max_tokens=%s",
+            chunk_index,
+            chunk_count,
+            attempt,
+            stop_reason,
+            usage.get("inputTokens", "unknown"),
+            usage.get("outputTokens", "unknown"),
+            token_limit,
+        )
+
+        blocks = response.get("output", {}).get("message", {}).get("content", [])
+        raw_text = "\n".join(
+            block["text"] for block in blocks
+            if isinstance(block, dict) and isinstance(block.get("text"), str)
+        )
+        if not raw_text:
+            last_parse_error = ValueError(
+                f"The AI review returned an empty response for segment {chunk_index}."
+            )
+        else:
+            try:
+                parsed_report = _parse_report(raw_text, chunk["text"])
+            except ValueError as exc:
+                last_parse_error = exc
+            else:
+                if stop_reason == "max_tokens":
+                    last_parse_error = ValueError(
+                        f"The AI review response for segment {chunk_index} reached the output-token limit."
+                    )
+                else:
+                    return parsed_report
+
+        if attempt == 1:
+            logger.warning(
+                "Retrying AI review segment %s/%s after incomplete response (stop_reason=%s).",
+                chunk_index,
+                chunk_count,
+                stop_reason,
+            )
+
+    raise last_parse_error or ValueError(
+        f"The AI review could not produce a complete response for segment {chunk_index}."
+    )
+
+
+def _combine_chunk_reports(
+    reports: list[dict[str, Any]],
+    expected_segment_count: int,
+) -> dict[str, Any]:
+    """Combine every segment review and remove segment-local limitations."""
+    if expected_segment_count < 1 or len(reports) != expected_segment_count:
+        raise ValueError(
+            "The manuscript review is incomplete: "
+            f"{len(reports)} of {expected_segment_count} segments were reviewed."
+        )
+
+    findings: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    limitations: list[str] = []
+    summaries: list[str] = []
+
+    for report in reports:
+        summary = report.get("summary", "").strip()
+        if summary and summary not in summaries:
+            summaries.append(summary)
+        for finding in report.get("findings", []):
+            signature = (
+                finding.get("category", ""),
+                finding.get("excerpt", "").strip(),
+                finding.get("explanation", "").strip(),
+            )
+            if signature not in seen and len(findings) < MAX_AI_FINDINGS:
+                seen.add(signature)
+                findings.append(finding)
+        for limitation in report.get("limitations", []):
+            # A segment model is instructed to review only its supplied portion.
+            # That local caveat must not be presented as a limitation of the
+            # consolidated report after every segment has completed.
+            segment_local = re.search(
+                r"\bsegment\b"
+                r"|\bprovided\s+(?:manuscript\s+)?portion\b"
+                r"|\bsupplied\s+(?:manuscript\s+)?portion\b"
+                r"|\bfull\s+manuscript\s+context\b"
+                r"|\bcontext\s+from\s+(?:the\s+)?other\s+sections?\b"
+                r"|\bother\s+sections?\s+(?:were|was)\s+not\s+provided\b",
+                limitation,
+                flags=re.IGNORECASE,
+            )
+            if not segment_local and limitation not in limitations:
+                limitations.append(limitation)
+
+    first = reports[0]
+    return {
+        "summary": " ".join(summaries)[:3_000] or "The manuscript segments were reviewed.",
+        "document_type": first.get("document_type", "Not specified"),
+        "academic_level": first.get("academic_level", "Not specified"),
+        "findings": findings[:MAX_AI_FINDINGS],
+        "limitations": limitations[:20],
+        "model_id": AI_REVIEW_MODEL_ID,
+        "reviewed_at": _now(),
+        "review_segments": len(reports),
+        "total_segments": expected_segment_count,
+        "review_complete": len(reports) == expected_segment_count,
+    }
 
 def _set_terminal_status(
     table: Any,
@@ -302,40 +571,74 @@ def run_ai_review(
         if len(manuscript_text) != char_count:
             raise ValueError("The extracted text length does not match its extraction record.")
 
+        citation_verification = verify_citations_and_references(
+            manuscript_text,
+            check_external=True,
+        )
+        citation_evidence = {
+            "citation_count": citation_verification.get("citation_count", 0),
+            "parsed_reference_count": citation_verification.get("parsed_reference_count", 0),
+            "summary": citation_verification.get("summary", {}),
+            "findings": citation_verification.get("findings", [])[:60],
+            "doi_checks": [
+                {
+                    "doi": item.get("doi"),
+                    "reference": item.get("reference"),
+                    "registry_result": item.get("registry_result"),
+                    "metadata_comparison": item.get("metadata_comparison"),
+                }
+                for item in citation_verification.get("doi_checks", [])[:20]
+            ],
+            "url_checks": [
+                {
+                    "url": item.get("url"),
+                    "reference": item.get("reference"),
+                    "status": item.get("status"),
+                    "http_status": item.get("http_status"),
+                    "final_url": item.get("final_url"),
+                    "reason": item.get("reason"),
+                }
+                for item in citation_verification.get("url_checks", [])[:20]
+            ],
+            "limitations": citation_verification.get("limitations", []),
+        }
+
         bedrock = boto3.client(
             "bedrock-runtime",
             region_name=os.getenv("AWS_REGION", "us-east-1"),
         )
-        response = bedrock.converse(
-            modelId=AI_REVIEW_MODEL_ID,
-            system=[{"text": SYSTEM_INSTRUCTIONS}],
-            messages=[{
-                "role": "user",
-                "content": [{
-                    "text": (
-                        "Review the following manuscript according to the system instructions. "
-                        "Return only the requested JSON object.\n\n"
-                        "<MANUSCRIPT>\n"
-                        + manuscript_text
-                        + "\n</MANUSCRIPT>"
-                    )
-                }],
-            }],
-            inferenceConfig={
-                "maxTokens": MAX_AI_OUTPUT_TOKENS,
-                "temperature": 0,
-            },
-        )
+        chunks = _split_manuscript_into_sections(manuscript_text)
+        if not chunks:
+            raise ValueError("The manuscript could not be divided into reviewable sections.")
 
-        blocks = response.get("output", {}).get("message", {}).get("content", [])
-        raw_text = "\n".join(
-            block["text"] for block in blocks
-            if isinstance(block, dict) and isinstance(block.get("text"), str)
-        )
-        if not raw_text:
-            raise ValueError("The AI review returned an empty response.")
+        chunk_reports = []
+        for index, chunk in enumerate(chunks, start=1):
+            logger.info(
+                "Reviewing manuscript segment %s/%s for submission %s (%s characters)",
+                index,
+                len(chunks),
+                submission_id,
+                len(chunk["text"]),
+            )
+            chunk_reports.append(
+                _request_ai_review_chunk(
+                    bedrock,
+                    chunk,
+                    index,
+                    len(chunks),
+                    citation_evidence,
+                )
+            )
 
-        report = _parse_report(raw_text, manuscript_text)
+        report = _combine_chunk_reports(chunk_reports, expected_segment_count=len(chunks))
+        report = _enforce_deterministic_citation_findings(report, citation_evidence)
+        logger.info(
+            "AI review consolidated %s/%s segments for submission %s",
+            report["review_segments"],
+            report["total_segments"],
+            submission_id,
+        )
+        report["citation_verification"] = citation_evidence
         saved = _set_terminal_status(
             table, key, lease_token, "completed", report=report
         )
@@ -345,10 +648,9 @@ def run_ai_review(
         return {"status": "completed", "finding_count": len(report["findings"])}
 
     except Exception as exc:
-        logger.error(
-            "AI review failed for submission %s (%s)",
+        logger.exception(
+            "AI review failed for submission %s",
             submission_id,
-            type(exc).__name__,
         )
         if lease_owned:
             try:

@@ -7,7 +7,9 @@ import {
   createIntegritySubmission,
   extractIntegritySubmission,
   deleteIntegritySubmission,
+  getIntegritySubmission,
   listIntegritySubmissions,
+  queueIntegrityAiReview,
   uploadIntegrityFile,
   type IntegritySubmission,
   type IntegrityExtractionResult,
@@ -27,6 +29,10 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function formatAiStatus(value?: string) {
+  return (value || "not_started").replaceAll("_", " ");
+}
+
 export default function ResearchIntegrityPage() {
   const [submissions, setSubmissions] = useState<IntegritySubmission[]>([]);
   const [file, setFile] = useState<File | null>(null);
@@ -35,13 +41,53 @@ export default function ResearchIntegrityPage() {
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const [checkingId, setCheckingId] = useState("");
+  const [aiReviewingId, setAiReviewingId] = useState("");
+  const [aiRefreshingId, setAiRefreshingId] = useState("");
   const [reports, setReports] = useState<Record<string, IntegrityExtractionResult>>({});
+  const [reportLoadErrors, setReportLoadErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const refresh = useCallback(async () => {
     const result = await listIntegritySubmissions();
     setSubmissions(result.submissions);
+
+    // The deterministic report is persisted with the submission, but the
+    // submissions list intentionally returns only compact submission data.
+    // Rehydrate saved reports so they remain visible after a page refresh.
+    const extractedSubmissions = result.submissions.filter(
+      (item) => item.status === "extraction_completed"
+    );
+    const savedReports = await Promise.all(
+      extractedSubmissions.map(async (item) => {
+        try {
+          const saved = await extractIntegritySubmission(item.submission_id);
+          return { id: item.submission_id, report: saved, error: "" };
+        } catch (err) {
+          return {
+            id: item.submission_id,
+            report: null,
+            error: err instanceof Error ? err.message : "Unable to reload the saved deterministic report.",
+          };
+        }
+      })
+    );
+
+    setReports((current) => {
+      const next = { ...current };
+      for (const saved of savedReports) {
+        if (saved.report) next[saved.id] = saved.report;
+      }
+      return next;
+    });
+    setReportLoadErrors((current) => {
+      const next = { ...current };
+      for (const saved of savedReports) {
+        if (saved.error) next[saved.id] = saved.error;
+        else delete next[saved.id];
+      }
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -106,7 +152,7 @@ export default function ResearchIntegrityPage() {
 
     setFile(null);
     setPermissionConfirmed(false);
-    setNotice("Manuscript uploaded securely. You can now run the initial deterministic document checks.");
+    setNotice("Manuscript uploaded securely. Run the initial document checks before requesting an AI review.");
     setUploading(false);
     try {
       await refresh();
@@ -129,6 +175,47 @@ export default function ResearchIntegrityPage() {
       setError(err instanceof Error ? err.message : "Unable to extract and check this manuscript.");
     } finally {
       setCheckingId("");
+    }
+  }
+
+  async function handleRunAiReview(submissionId: string) {
+    if (aiReviewingId || aiRefreshingId || deletingId) return;
+    setAiReviewingId(submissionId);
+    setError("");
+    setNotice("");
+    try {
+      const result = await queueIntegrityAiReview(submissionId);
+      setSubmissions((current) => current.map((item) =>
+        item.submission_id === submissionId
+          ? { ...item, ai_review_status: result.ai_review_status, ai_review_message: undefined }
+          : item
+      ));
+      setNotice("AI review queued successfully. Use Refresh AI status to check when the report is ready.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to start the AI manuscript review.");
+    } finally {
+      setAiReviewingId("");
+    }
+  }
+
+  async function handleRefreshAiStatus(submissionId: string) {
+    if (aiRefreshingId || aiReviewingId || deletingId) return;
+    setAiRefreshingId(submissionId);
+    setError("");
+    setNotice("");
+    try {
+      const result = await getIntegritySubmission(submissionId);
+      setSubmissions((current) => current.map((item) =>
+        item.submission_id === submissionId ? result.submission : item
+      ));
+      const status = result.submission.ai_review_status || "not_started";
+      setNotice(status === "completed"
+        ? "AI manuscript review completed. The report is displayed below."
+        : `AI review status: ${formatAiStatus(status)}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to refresh the AI review status.");
+    } finally {
+      setAiRefreshingId("");
     }
   }
 
@@ -162,8 +249,8 @@ export default function ResearchIntegrityPage() {
         </div>
 
         <div className="notice warning">
-          <strong>Current stage: deterministic manuscript checks</strong>
-          Uploads are stored privately. You can extract readable text and run initial rule-based checks. AI-assisted assessment, similarity comparison and downloadable reports are not yet available.
+          <strong>AI-assisted manuscript review — staging preview</strong>
+          Run the initial rule-based checks, then request a separate AI academic review. Similarity comparison and downloadable reports are not yet available. AI findings are advisory and require human verification.
         </div>
 
         <section className="card integrity-upload">
@@ -210,54 +297,227 @@ export default function ResearchIntegrityPage() {
             {submissions.map((item) => {
               const report = reports[item.submission_id]?.report;
               const documentType = report?.document_type;
+              const aiStatus = item.ai_review_status || "not_started";
+              const aiReport = item.ai_report;
+              const citationReport = report?.citation_verification;
+              const citationSummary = citationReport?.summary && typeof citationReport.summary === "object" ? citationReport.summary : undefined;
+              const aiCitation = aiReport?.citation_verification;
 
               return (
-              <div className="listitem integrity-submission" key={item.submission_id}>
-                <div>
-                  <strong>{item.file_name}</strong>
-                  <div className="muted">{formatSize(item.size_bytes)} · Uploaded {formatDate(item.created_at)}</div>
-                  <div className="integrity-status">{item.status.replaceAll("_", " ")}</div>
-                  {(item.status === "uploaded" || item.status === "extraction_completed") && (
-                    <button className="button primary integrity-check-button" type="button" onClick={() => handleExtract(item.submission_id)} disabled={Boolean(checkingId) || Boolean(deletingId)}>
-                      {checkingId === item.submission_id ? "Checking manuscript..." : reports[item.submission_id] ? "Refresh checks" : item.status === "extraction_completed" ? "View saved checks" : "Run document checks"}
-                    </button>
-                  )}
-                  {report && (
-                    <div className="integrity-report">
-                      <strong>Initial document report</strong>
-                      <p className="muted">{report.word_count.toLocaleString()} words · {report.detected_sections.length} detected sections · {report.findings.length} findings</p>
-                      {documentType && (
-                        <div className="integrity-classification">
-                          <strong>Detected document type: {documentType.label}</strong>
-                          <p className="muted">Classification confidence: {documentType.confidence}. This is an automated, rule-based classification and should be confirmed by a human reviewer.</p>
-                          <p>{documentType.basis}</p>
-                        </div>
-                      )}
-                      {report.assessment_notes?.map((note, index) => (
-                        <p className="muted" key={`assessment-note-${index}`}>{note}</p>
-                      ))}
-                      {report.findings.map((finding, index) => (
-                        <div className="integrity-finding" key={finding.rule_id + index}>
-                          <strong>{finding.title}</strong>
-                          <span className="integrity-severity">{finding.severity}</span>
-                          <p>{finding.detail}</p>
-                          {finding.evidence && <blockquote>{finding.evidence}</blockquote>}
-                        </div>
-                      ))}
-                      {report.findings.length === 0 && <p>No deterministic flags were raised. This is not a certification of manuscript quality.</p>}
-                      <p className="muted">These checks are preliminary and require human review. They do not detect plagiarism or verify DOI registration.</p>
-                    </div>
-                  )}
+                <div className="listitem integrity-submission" key={item.submission_id}>
+                  <div>
+                    <strong>{item.file_name}</strong>
+                    <div className="muted">{formatSize(item.size_bytes)} · Uploaded {formatDate(item.created_at)}</div>
+                    <div className="integrity-status">{item.status.replaceAll("_", " ")}</div>
+                    {(item.status === "uploaded" || item.status === "extraction_completed") && (
+                      <button className="button primary integrity-check-button" type="button" onClick={() => handleExtract(item.submission_id)} disabled={Boolean(checkingId) || Boolean(deletingId)}>
+                        {checkingId === item.submission_id ? "Loading saved checks..." : reports[item.submission_id] ? "Refresh checks" : reportLoadErrors[item.submission_id] ? "Retry loading saved checks" : item.status === "extraction_completed" ? "View saved checks" : "Run document checks"}
+                      </button>
+                    )}
+                    {reportLoadErrors[item.submission_id] && !report && (
+                      <div className="notice integrity-error">
+                        Saved deterministic report could not be reloaded: {reportLoadErrors[item.submission_id]}
+                      </div>
+                    )}
+                    {report && (
+                      <div className="integrity-report">
+                        <strong>Deterministic structural integrity report</strong>
+                        <p className="muted">Extracted text: {report.word_count.toLocaleString()} words · {report.detected_sections.length} detected sections · {report.findings.length} deterministic findings</p>
+                        <p className="muted">Word count is calculated from extracted manuscript text and may differ from Microsoft Word's count.</p>
+                        {documentType && (
+                          <div className="integrity-classification">
+                            <strong>Detected document type: {documentType.label}</strong>
+                            <p className="muted">Classification confidence: {documentType.confidence}. This is an automated, rule-based classification and should be confirmed by a human reviewer.</p>
+                            <p>{documentType.basis}</p>
+                          </div>
+                        )}
+                        {report.assessment_notes?.map((note, index) => (
+                          <p className="muted" key={`assessment-note-${index}`}>{note}</p>
+                        ))}
+                        {report.findings.map((finding, index) => (
+                          <div className="integrity-finding" key={finding.rule_id + index}>
+                            <strong>{finding.title}</strong>
+                            <span className="integrity-severity">{finding.severity}</span>
+                            <p>{finding.detail}</p>
+                            {finding.evidence && <blockquote>{finding.evidence}</blockquote>}
+                          </div>
+                        ))}
+                        {report.findings.length === 0 && <p>No deterministic flags were raised. This is not a certification of manuscript quality.</p>}
+                        <p className="muted">These checks are preliminary and require human review. They do not detect plagiarism or verify DOI registration.</p>
+                      </div>
+                    )}
+
+                    {citationReport && (
+                      <div className="integrity-report integrity-citation-report">
+                        <strong>Deterministic citation and reference verification</strong>
+                        <p className="muted">This assessment is generated from the extracted manuscript and remains separate from the AI academic review.</p>
+                        {citationReport && (
+                          <div className="integrity-classification">
+                            <strong>Citation and reference matching</strong>
+                            {citationSummary ? (
+                              <p className="muted">
+                                {citationSummary.matched_citation_count ?? 0} matched · {citationSummary.unmatched_citation_count ?? 0} unmatched citations · {citationSummary.uncited_reference_count ?? 0} uncited references
+                              </p>
+                            ) : <p className="muted">Citation matching could not be assessed from the extracted text.</p>}
+                            {citationReport.findings?.map((finding, index) => (
+                              <div className="integrity-finding" key={`citation-finding-${finding.rule_id}-${index}`}>
+                                <strong>{finding.rule_id.replaceAll(".", " ")}</strong>
+                                <span className="integrity-severity">{finding.severity}</span>
+                                <p>{finding.detail}</p>
+                                {finding.citation && <blockquote>{finding.citation}</blockquote>}
+                                {finding.reference && <blockquote>{finding.reference}</blockquote>}
+                              </div>
+                            ))}
+                            {(!citationReport.findings || citationReport.findings.length === 0) && (
+                              <p>No unmatched citations or uncited references were detected by the initial author–year check.</p>
+                            )}
+                            {citationReport.limitations?.map((limitation, index) => (
+                              <p className="muted" key={`citation-limit-${index}`}>{limitation}</p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+
+                    {item.status === "extraction_completed" && (
+                      <div className="integrity-ai-review">
+                        <div className="integrity-status">AI review: {formatAiStatus(aiStatus)}</div>
+                        {aiStatus === "not_started" && (
+                          <button
+                            className="button primary integrity-check-button"
+                            type="button"
+                            onClick={() => handleRunAiReview(item.submission_id)}
+                            disabled={Boolean(aiReviewingId) || Boolean(aiRefreshingId) || Boolean(deletingId)}
+                          >
+                            {aiReviewingId === item.submission_id ? "Queueing AI review..." : "Run AI manuscript review"}
+                          </button>
+                        )}
+                        {(aiStatus === "queued" || aiStatus === "processing") && (
+                          <button
+                            className="button integrity-check-button"
+                            type="button"
+                            onClick={() => handleRefreshAiStatus(item.submission_id)}
+                            disabled={Boolean(aiRefreshingId) || Boolean(aiReviewingId) || Boolean(deletingId)}
+                          >
+                            {aiRefreshingId === item.submission_id ? "Refreshing..." : "Refresh AI status"}
+                          </button>
+                        )}
+                        {(aiStatus === "failed" || aiStatus === "not_supported") && (
+                          <p className="muted">{item.ai_review_message || "This AI review attempt could not be completed."}</p>
+                        )}
+                        {aiReport && (
+                          <div className="integrity-report">
+                            <strong>AI-assisted academic review (supplementary assessment)</strong>
+                            <p className="muted">Document type: {aiReport.document_type} · Academic level: {aiReport.academic_level}</p>
+                            <p>{aiReport.summary}</p>
+                            <p className="muted">
+                              Segment coverage: {aiReport.review_segments ?? "not recorded"} of {aiReport.total_segments ?? "not recorded"} segments reviewed
+                              {aiReport.review_complete === true ? " · Complete consolidated review" : aiReport.review_complete === false ? " · Incomplete review — do not treat as a full manuscript assessment" : " · Coverage status not recorded"}
+                            </p>
+                            {aiCitation && (
+                              <div className="integrity-classification">
+                                <strong>AI review: registry and URL verification details</strong>
+                                {aiCitation.summary && typeof aiCitation.summary === "object" ? (
+                                  <>
+                                    <p className="muted">
+                                      {aiCitation.citation_count ?? (typeof aiCitation.summary === "object" && aiCitation.summary ? (aiCitation.summary.matched_citation_count ?? 0) + (aiCitation.summary.unmatched_citation_count ?? 0) : 0)} in-text citations detected · {aiCitation.parsed_reference_count ?? "not recorded in this saved report"} reference entries parsed
+                                    </p>
+                                    <div className="integrity-citation-stats">
+                                      <div className="integrity-citation-stat"><span>Matched citations</span><strong>{aiCitation.summary.matched_citation_count ?? 0}</strong></div>
+                                      <div className="integrity-citation-stat"><span>Unmatched citations</span><strong>{aiCitation.summary.unmatched_citation_count ?? 0}</strong></div>
+                                      <div className="integrity-citation-stat"><span>Uncited references</span><strong>{aiCitation.summary.uncited_reference_count ?? 0}</strong></div>
+                                      <div className="integrity-citation-stat"><span>Possible duplicates</span><strong>{(aiCitation.findings || []).filter((finding) => finding.rule_id === "reference.possible_duplicate").length}</strong></div>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <p className="muted">Citation matching could not be assessed from the extracted text.</p>
+                                )}
+                                <p className="muted">
+                                  DOI records checked: {aiCitation.summary && typeof aiCitation.summary === "object" ? aiCitation.summary.doi_checked_count ?? aiCitation.doi_checks?.length ?? 0 : aiCitation.doi_checks?.length ?? 0}
+                                  {" · "}Reference URLs checked: {aiCitation.summary && typeof aiCitation.summary === "object" ? aiCitation.summary.url_checked_count ?? aiCitation.url_checks?.length ?? 0 : aiCitation.url_checks?.length ?? 0}
+                                  {" · "}URLs returning HTTP errors: {aiCitation.summary && typeof aiCitation.summary === "object" ? aiCitation.summary.url_inaccessible_count ?? 0 : (aiCitation.url_checks || []).filter((check) => check.status === "inaccessible").length}
+                                </p>
+                                {(aiCitation.findings || []).filter((finding) => ["citation.reference_missing", "reference.not_cited", "reference.possible_duplicate"].includes(finding.rule_id)).length > 0 && (
+                                  <>
+                                    <strong>Reconciliation findings</strong>
+                                    {(aiCitation.findings || []).filter((finding) => ["citation.reference_missing", "reference.not_cited", "reference.possible_duplicate"].includes(finding.rule_id)).map((finding, index) => (
+                                      <div className="integrity-finding" key={`reconciliation-${finding.rule_id}-${index}`}>
+                                        <strong>{finding.rule_id.replaceAll(".", " ")}</strong>
+                                        <span className="integrity-severity">{finding.severity}</span>
+                                        <p>{finding.detail}</p>
+                                        {finding.citation && <blockquote>{finding.citation}</blockquote>}
+                                        {finding.reference && <blockquote>{finding.reference}</blockquote>}
+                                      </div>
+                                    ))}
+                                  </>
+                                )}
+                                {aiCitation.doi_checks?.length ? (
+                                  <>
+                                    <strong>DOI registry checks</strong>
+                                    <p className="muted">DOIs are checked against Crossref and, when not found there, DataCite. Registry presence alone does not prove that a source supports the manuscript's claim.</p>
+                                    {aiCitation.doi_checks.map((check, index) => (
+                                      <div className="integrity-finding" key={`doi-check-${index}`}>
+                                        <strong>{check.doi}</strong>
+                                        <span className="integrity-severity">{check.metadata_comparison?.replaceAll("_", " ") || "not verified"}</span>
+                                        <p className="muted">Registry: {check.registry_result?.registry || "unknown"} · Record status: {check.registry_result?.status || "unavailable"}</p>
+                                        {check.registry_result?.title && <p>{check.registry_result.title}</p>}
+                                        {check.registry_result?.year && <p className="muted">Registry publication year: {check.registry_result.year}</p>}
+                                      </div>
+                                    ))}
+                                  </>
+                                ) : <p className="muted">No DOI records were checked in this review.</p>}
+                                {aiCitation.url_checks?.length ? (
+                                  <>
+                                    <strong>Reference URL accessibility</strong>
+                                    {aiCitation.url_checks.map((check, index) => (
+                                      <div className="integrity-finding" key={`url-check-${index}`}>
+                                        <strong>{check.url}</strong>
+                                        <span className="integrity-severity">{check.status?.replaceAll("_", " ") || "not verified"}</span>
+                                        <p className="muted">{check.http_status ? `HTTP ${check.http_status}` : "No HTTP response"}{check.final_url && check.final_url !== check.url ? ` · Redirected to ${check.final_url}` : ""}</p>
+                                        {check.reason && <p className="muted">{check.reason}</p>}
+                                      </div>
+                                    ))}
+                                  </>
+                                ) : <p className="muted">No reference URLs were checked in this review.</p>}
+                                {aiCitation.limitations?.map((limitation, index) => (
+                                  <p className="muted" key={`ai-citation-limit-${index}`}>{limitation}</p>
+                                ))}
+                              </div>
+                            )}
+                            <strong>Review findings ({aiReport.findings.length})</strong>
+                            {aiReport.findings.map((finding, index) => (
+                              <div className="integrity-finding" key={`ai-finding-${index}`}>
+                                <strong>{finding.category} · {finding.severity}</strong>
+                                {finding.location && <p className="muted">{finding.location}</p>}
+                                {finding.excerpt && <blockquote>{finding.excerpt}</blockquote>}
+                                <p>{finding.explanation}</p>
+                                {finding.recommendation && <p><strong>Recommendation:</strong> {finding.recommendation}</p>}
+                                <p className="muted">Confidence: {finding.confidence}. Verify this observation against the manuscript.</p>
+                              </div>
+                            ))}
+                            {aiReport.findings.length === 0 && <p>No specific AI findings were returned. Review the summary and limitations carefully.</p>}
+                            {aiReport.limitations.length > 0 && (
+                              <>
+                                <strong>Review limitations</strong>
+                                <ul>{aiReport.limitations.map((limitation, index) => <li key={`ai-limitation-${index}`}>{limitation}</li>)}</ul>
+                              </>
+                            )}
+                            <p className="muted">Reviewed {formatDate(aiReport.reviewed_at)}. Model-assisted assessment with limited DOI registry and URL accessibility checks; not a plagiarism check, complete source-authenticity check, misconduct determination or guarantee of publication.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => handleDelete(item.submission_id)}
+                    disabled={Boolean(deletingId)}
+                  >
+                    {deletingId === item.submission_id ? "Deleting..." : "Delete"}
+                  </button>
                 </div>
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => handleDelete(item.submission_id)}
-                  disabled={Boolean(deletingId)}
-                >
-                  {deletingId === item.submission_id ? "Deleting..." : "Delete"}
-                </button>
-              </div>
               );
             })}
           </div>

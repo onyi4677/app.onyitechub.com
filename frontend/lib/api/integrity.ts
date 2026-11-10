@@ -1,5 +1,89 @@
 import { apiRequest } from "./client";
 
+export type IntegrityAiReviewStatus =
+  | "not_started"
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "not_supported";
+
+export type IntegrityAiFinding = {
+  category: string;
+  severity: "low" | "moderate" | "high";
+  location: string;
+  excerpt: string;
+  explanation: string;
+  recommendation: string;
+  confidence: "low" | "moderate" | "high";
+};
+
+export type CitationVerificationSummary = {
+  matched_citation_count?: number;
+  unmatched_citation_count?: number;
+  uncited_reference_count?: number;
+  doi_checked_count?: number;
+  url_checked_count?: number;
+  url_inaccessible_count?: number;
+};
+
+export type CitationVerificationFinding = {
+  rule_id: string;
+  status: string;
+  severity: string;
+  citation?: string;
+  reference?: string;
+  doi?: string;
+  detail: string;
+};
+
+export type CitationDoiCheck = {
+  doi: string;
+  registry_result?: {
+    status?: string;
+    registry?: string;
+    title?: string;
+    authors?: string[];
+    year?: string;
+  };
+  metadata_comparison?: string;
+  reference?: string;
+};
+
+export type CitationUrlCheck = {
+  url: string;
+  reference?: string;
+  status?: string;
+  http_status?: number;
+  final_url?: string;
+  reason?: string;
+};
+
+export type CitationVerificationReport = {
+  status: string;
+  citation_count?: number;
+  parsed_reference_count?: number;
+  summary?: CitationVerificationSummary | string;
+  findings?: CitationVerificationFinding[];
+  doi_checks?: CitationDoiCheck[];
+  url_checks?: CitationUrlCheck[];
+  limitations?: string[];
+};
+
+export type IntegrityAiReport = {
+  summary: string;
+  document_type: string;
+  academic_level: string;
+  findings: IntegrityAiFinding[];
+  limitations: string[];
+  model_id: string;
+  reviewed_at: string;
+  review_segments?: number;
+  total_segments?: number;
+  review_complete?: boolean;
+  citation_verification?: CitationVerificationReport;
+};
+
 export type IntegritySubmission = {
   submission_id: string;
   file_name: string;
@@ -8,6 +92,10 @@ export type IntegritySubmission = {
   status: "pending_upload" | "uploaded" | "extraction_completed" | "assessing" | "completed" | "failed";
   created_at: string;
   updated_at: string;
+  ai_review_status?: IntegrityAiReviewStatus;
+  ai_review_updated_at?: string;
+  ai_review_message?: string;
+  ai_report?: IntegrityAiReport;
 };
 
 type UploadPolicy = {
@@ -90,6 +178,7 @@ export type IntegrityExtractionResult = {
     assessment_notes?: string[];
     citation_pattern_count?: number;
     doi_pattern_count?: number;
+    citation_verification?: CitationVerificationReport;
     findings: IntegrityFinding[];
     limitations: string[];
   };
@@ -107,5 +196,22 @@ export async function extractIntegritySubmission(submissionId: string) {
   return apiRequest<IntegrityExtractionResult>(
     `/api/integrity/submissions/${encodeURIComponent(submissionId)}/extract`,
     { method: "POST" }
+  );
+}
+
+export async function queueIntegrityAiReview(submissionId: string) {
+  return apiRequest<{
+    submission_id: string;
+    ai_review_status: "queued";
+    message: string;
+  }>(
+    `/api/integrity/submissions/${encodeURIComponent(submissionId)}/ai-review`,
+    { method: "POST" }
+  );
+}
+
+export async function getIntegritySubmission(submissionId: string) {
+  return apiRequest<{ submission: IntegritySubmission }>(
+    `/api/integrity/submissions/${encodeURIComponent(submissionId)}`
   );
 }

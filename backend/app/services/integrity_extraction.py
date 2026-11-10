@@ -14,6 +14,7 @@ from docx.oxml.ns import qn
 from pypdf import PdfReader
 
 from app.services.integrity_checks import run_deterministic_checks
+from app.services.citation_verification import verify_citations_and_references
 from app.services.integrity_submissions import (
     SubmissionExpiredError,
     SubmissionNotFoundError,
@@ -169,9 +170,14 @@ def extract_and_check_submission(owner_sub: str, submission_id: str) -> dict[str
 
         if not extracted_text:
             report = run_deterministic_checks("")
+            report["citation_verification"] = verify_citations_and_references("", check_external=False)
             extraction_status = "no_readable_text"
         else:
             report = run_deterministic_checks(extracted_text)
+            report["citation_verification"] = verify_citations_and_references(
+                extracted_text,
+                check_external=False,
+            )
             extraction_status = "text_extracted"
 
         text_key = f"submissions/{owner_sub}/{submission_id}/derived/extracted.txt"
