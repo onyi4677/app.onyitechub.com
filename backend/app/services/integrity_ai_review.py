@@ -364,8 +364,17 @@ def _request_ai_review_chunk(
     )
 
 
-def _combine_chunk_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
-    """Combine segment reviews into one report while removing repeated findings."""
+def _combine_chunk_reports(
+    reports: list[dict[str, Any]],
+    expected_segment_count: int,
+) -> dict[str, Any]:
+    """Combine every segment review and remove segment-local limitations."""
+    if expected_segment_count < 1 or len(reports) != expected_segment_count:
+        raise ValueError(
+            "The manuscript review is incomplete: "
+            f"{len(reports)} of {expected_segment_count} segments were reviewed."
+        )
+
     findings: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
     limitations: list[str] = []
@@ -381,16 +390,24 @@ def _combine_chunk_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
                 finding.get("excerpt", "").strip(),
                 finding.get("explanation", "").strip(),
             )
-            if signature not in seen:
+            if signature not in seen and len(findings) < MAX_AI_FINDINGS:
                 seen.add(signature)
                 findings.append(finding)
-            if len(findings) >= MAX_AI_FINDINGS:
-                break
         for limitation in report.get("limitations", []):
-            if limitation not in limitations:
+            # A segment model is instructed to review only its supplied portion.
+            # That local caveat must not be presented as a limitation of the
+            # consolidated report after every segment has completed.
+            segment_local = re.search(
+                r"only\\s+(?:(?:the\\s+)?supplied\\s+)?segment\\s+\\d+\\s+of\\s+\\d+"
+                r"|only\\s+the\\s+supplied\\s+segment"
+                r"|other\\s+segments?\\s+(?:were|was)\\s+not\\s+reviewed",
+                limitation,
+                flags=re.IGNORECASE,
+            )
+            if not segment_local and limitation not in limitations:
                 limitations.append(limitation)
 
-    first = reports[0] if reports else {}
+    first = reports[0]
     return {
         "summary": " ".join(summaries)[:3_000] or "The manuscript segments were reviewed.",
         "document_type": first.get("document_type", "Not specified"),
@@ -400,6 +417,8 @@ def _combine_chunk_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
         "model_id": AI_REVIEW_MODEL_ID,
         "reviewed_at": _now(),
         "review_segments": len(reports),
+        "total_segments": expected_segment_count,
+        "review_complete": len(reports) == expected_segment_count,
     }
 
 def _set_terminal_status(
@@ -608,8 +627,14 @@ def run_ai_review(
                 )
             )
 
-        report = _combine_chunk_reports(chunk_reports)
+        report = _combine_chunk_reports(chunk_reports, expected_segment_count=len(chunks))
         report = _enforce_deterministic_citation_findings(report, citation_evidence)
+        logger.info(
+            "AI review consolidated %s/%s segments for submission %s",
+            report["review_segments"],
+            report["total_segments"],
+            submission_id,
+        )
         report["citation_verification"] = citation_evidence
         saved = _set_terminal_status(
             table, key, lease_token, "completed", report=report
