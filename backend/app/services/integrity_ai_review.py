@@ -44,7 +44,7 @@ Assess, where relevant:
 - appropriateness and clarity of methodology, sampling, instruments and analysis;
 - unsupported claims, evidence gaps and internal inconsistencies;
 - statistical reporting and interpretation;
-- citation and reference consistency, using the supplied deterministic citation reconciliation, DOI registry evidence, and URL accessibility evidence where available;
+- citation and reference consistency, using the supplied deterministic citation reconciliation, DOI registry evidence, and URL accessibility evidence where available. For citation/reference mismatch findings, report only exact unmatched citation strings present in deterministic evidence. Do not independently infer missing references from the manuscript; do not repeat a grouped citation warning when the deterministic evidence does not flag it;
 - academic structure, clarity, repetition and logical flow.
 
 Do not claim that you searched plagiarism databases or established academic
@@ -161,6 +161,30 @@ def _parse_report(raw_text: str, manuscript_text: str) -> dict[str, Any]:
         "model_id": AI_REVIEW_MODEL_ID,
         "reviewed_at": _now(),
     }
+
+
+def _enforce_deterministic_citation_findings(
+    report: dict[str, Any], citation_evidence: dict[str, Any]
+) -> dict[str, Any]:
+    """Prevent the model from inventing or duplicating citation mismatch findings."""
+    unmatched = {
+        str(item.get("citation", "")).strip()
+        for item in citation_evidence.get("findings", [])
+        if item.get("rule_id") == "citation.reference_missing" and item.get("citation")
+    }
+    original = report.get("findings", [])
+    filtered = [
+        item for item in original
+        if item.get("category") != "citation" or item.get("excerpt", "").strip() in unmatched
+    ]
+    removed = len(original) - len(filtered)
+    report["findings"] = filtered
+    if removed:
+        report.setdefault("limitations", []).append(
+            f"{removed} AI-generated citation finding(s) were omitted because they were not confirmed by deterministic citation reconciliation."
+        )
+        report["limitations"] = report["limitations"][:21]
+    return report
 
 
 def _set_terminal_status(
@@ -378,6 +402,7 @@ def run_ai_review(
             raise ValueError("The AI review returned an empty response.")
 
         report = _parse_report(raw_text, manuscript_text)
+        report = _enforce_deterministic_citation_findings(report, citation_evidence)
         report["citation_verification"] = citation_evidence
         saved = _set_terminal_status(
             table, key, lease_token, "completed", report=report
