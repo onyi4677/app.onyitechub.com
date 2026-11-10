@@ -31,7 +31,7 @@ NARRATIVE_CITATION_RE = re.compile(
 )
 REFERENCE_HEADING_RE = re.compile(r"^\s*(references|bibliography|works cited)\s*$", re.I)
 REFERENCE_START_RE = re.compile(
-    r"^\s*(?:\[?\d{1,3}\]?\.?\s+)?(.{2,180}?)\s*\(((?:19|20)\d{2}[a-z]?)\)",
+    r"^\s*(?:\[?\d{1,3}\]?\.?\s+)?(.{2,180}?)\s*\(((?:19|20)\d{2}[a-z]?)(?:[^)]{0,80})?\)",
     re.I,
 )
 YEAR_SUFFIX_RE = re.compile(r"\(((?:19|20)\d{2}[a-z]?)\)", re.I)
