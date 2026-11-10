@@ -339,6 +339,8 @@ def run_ai_review(
             check_external=True,
         )
         citation_evidence = {
+            "citation_count": citation_verification.get("citation_count", 0),
+            "parsed_reference_count": citation_verification.get("parsed_reference_count", 0),
             "summary": citation_verification.get("summary", {}),
             "findings": citation_verification.get("findings", [])[:60],
             "doi_checks": [
