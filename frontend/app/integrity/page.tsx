@@ -365,7 +365,7 @@ export default function ResearchIntegrityPage() {
                                 {aiCitation.summary && typeof aiCitation.summary === "object" ? (
                                   <>
                                     <p className="muted">
-                                      {aiCitation.citation_count ?? 0} in-text citations detected · {aiCitation.parsed_reference_count ?? 0} reference entries parsed
+                                      {aiCitation.citation_count ?? (typeof aiCitation.summary === "object" && aiCitation.summary ? (aiCitation.summary.matched_citation_count ?? 0) + (aiCitation.summary.unmatched_citation_count ?? 0) : 0)} in-text citations detected · {aiCitation.parsed_reference_count ?? "not recorded in this saved report"} reference entries parsed
                                     </p>
                                     <div className="integrity-citation-stats">
                                       <div className="integrity-citation-stat"><span>Matched citations</span><strong>{aiCitation.summary.matched_citation_count ?? 0}</strong></div>
