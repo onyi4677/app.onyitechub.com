@@ -46,7 +46,7 @@ Assess, where relevant:
 - appropriateness and clarity of methodology, sampling, instruments and analysis;
 - unsupported claims, evidence gaps and internal inconsistencies;
 - statistical reporting and interpretation;
-- citation and reference consistency, using the supplied deterministic citation reconciliation, DOI registry evidence, and URL accessibility evidence where available. For citation/reference mismatch findings, report only exact unmatched citation strings present in deterministic evidence. Do not independently infer missing references from the manuscript; do not repeat a grouped citation warning when the deterministic evidence does not flag it;
+- citation and reference consistency, using the supplied deterministic citation reconciliation, DOI registry evidence, and URL accessibility evidence where available. For citation/reference mismatch findings, report only exact unmatched citation strings present in deterministic evidence. Do not independently infer missing references from the manuscript; do not repeat a grouped citation warning when the deterministic evidence does not flag it. Do not state numerical citation or reference counts in the narrative summary; exact counts are calculated deterministically and displayed separately.
 - academic structure, clarity, repetition and logical flow.
 
 Do not claim that you searched plagiarism databases or established academic
@@ -398,9 +398,12 @@ def _combine_chunk_reports(
             # That local caveat must not be presented as a limitation of the
             # consolidated report after every segment has completed.
             segment_local = re.search(
-                r"only\s+(?:(?:the\s+)?supplied\s+)?segment\s+\d+\s+of\s+\d+"
-                r"|only\s+the\s+supplied\s+segment"
-                r"|other\s+segments?\s+(?:were|was)\s+not\s+reviewed",
+                r"\bsegment\b"
+                r"|\bprovided\s+(?:manuscript\s+)?portion\b"
+                r"|\bsupplied\s+(?:manuscript\s+)?portion\b"
+                r"|\bfull\s+manuscript\s+context\b"
+                r"|\bcontext\s+from\s+(?:the\s+)?other\s+sections?\b"
+                r"|\bother\s+sections?\s+(?:were|was)\s+not\s+provided\b",
                 limitation,
                 flags=re.IGNORECASE,
             )
