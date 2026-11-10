@@ -398,9 +398,9 @@ def _combine_chunk_reports(
             # That local caveat must not be presented as a limitation of the
             # consolidated report after every segment has completed.
             segment_local = re.search(
-                r"only\\s+(?:(?:the\\s+)?supplied\\s+)?segment\\s+\\d+\\s+of\\s+\\d+"
-                r"|only\\s+the\\s+supplied\\s+segment"
-                r"|other\\s+segments?\\s+(?:were|was)\\s+not\\s+reviewed",
+                r"only\s+(?:(?:the\s+)?supplied\s+)?segment\s+\\d+\s+of\s+\\d+"
+                r"|only\s+the\s+supplied\s+segment"
+                r"|other\s+segments?\s+(?:were|was)\s+not\s+reviewed",
                 limitation,
                 flags=re.IGNORECASE,
             )
