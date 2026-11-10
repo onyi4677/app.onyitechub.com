@@ -243,9 +243,9 @@ def _split_manuscript_into_sections(
             continue
         is_heading = _looks_like_section_heading(line)
         if is_heading:
-            current_section = line[:180]
             if current_lines and current_chars >= max_chars // 2:
                 flush()
+            current_section = line[:180]
             if not current_lines:
                 current_chunk_section = current_section
 
