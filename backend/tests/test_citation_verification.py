@@ -47,6 +47,22 @@ Collins, W. A. (2003). More than a myth: The developmental significance of roman
         self.assertEqual(result["summary"]["unmatched_citation_count"], 0)
         self.assertEqual(result["summary"]["uncited_reference_count"], 0)
 
+    def test_matches_federal_ministry_and_npc_with_vanguard_reported_separately(self):
+        manuscript = """Introduction
+Recent data are reported (Federal Ministry of Health and Social Welfare, 2025; National Population Commission [Nigeria] & ICF, 2025; Vanguard News, 2026).
+
+References
+Federal Ministry of Health and Social Welfare. (2025, October 17). FG launches 2024 NDHS report. https://health.gov.ng/example
+National Population Commission [Nigeria], & ICF. (2025). Nigeria Demographic and Health Survey 2023-24. NPC and ICF.
+"""
+        result = verify_citations_and_references(manuscript, check_external=False)
+        missing = [
+            item["citation"] for item in result["findings"]
+            if item["rule_id"] == "citation.reference_missing"
+        ]
+        self.assertEqual(missing, ["(Vanguard News, 2026)"])
+        self.assertEqual(result["summary"]["unmatched_citation_count"], 1)
+
     def test_reports_citation_without_reference_and_uncited_reference(self):
         manuscript = """Introduction
 This was previously reported (Missing, 2019).
