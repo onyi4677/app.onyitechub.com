@@ -50,6 +50,33 @@ export default function ResearchIntegrityPage() {
   const refresh = useCallback(async () => {
     const result = await listIntegritySubmissions();
     setSubmissions(result.submissions);
+
+    // The deterministic report is persisted with the submission, but the
+    // submissions list intentionally returns only compact submission data.
+    // Rehydrate saved reports so they remain visible after a page refresh.
+    const extractedSubmissions = result.submissions.filter(
+      (item) => item.status === "extraction_completed"
+    );
+    const savedReports = await Promise.all(
+      extractedSubmissions.map(async (item) => {
+        try {
+          const saved = await extractIntegritySubmission(item.submission_id);
+          return [item.submission_id, saved] as const;
+        } catch {
+          // Keep the submission list usable if an individual saved report
+          // cannot be retrieved (for example, an expired or legacy record).
+          return null;
+        }
+      })
+    );
+
+    setReports((current) => {
+      const next = { ...current };
+      for (const saved of savedReports) {
+        if (saved) next[saved[0]] = saved[1];
+      }
+      return next;
+    });
   }, []);
 
   useEffect(() => {
