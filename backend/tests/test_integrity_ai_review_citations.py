@@ -51,16 +51,16 @@ class DeterministicCitationFindingTests(unittest.TestCase):
 
     def test_long_manuscript_is_split_without_losing_paragraph_content(self):
         manuscript = (
-            "ABSTRACT\\nSummary paragraph.\\n"
-            "1. INTRODUCTION\\n" + ("Introduction text. " * 1_400) + "\\n"
-            "2. METHODOLOGY\\n" + ("Methods text. " * 1_400) + "\\n"
-            "REFERENCES\\n" + ("Reference entry. " * 1_400)
+            "ABSTRACT\nSummary paragraph.\n"
+            "1. INTRODUCTION\n" + ("Introduction text. " * 1_400) + "\n"
+            "2. METHODOLOGY\n" + ("Methods text. " * 1_400) + "\n"
+            "REFERENCES\n" + ("Reference entry. " * 1_400)
         )
         chunks = _split_manuscript_into_sections(manuscript, max_chars=10_000)
 
         self.assertGreater(len(chunks), 1)
         self.assertTrue(all(len(chunk["text"]) <= 10_000 for chunk in chunks))
-        combined = "\\n".join(chunk["text"] for chunk in chunks)
+        combined = "\n".join(chunk["text"] for chunk in chunks)
         for required in (
             "Summary paragraph.",
             "1. INTRODUCTION",
@@ -74,8 +74,8 @@ class DeterministicCitationFindingTests(unittest.TestCase):
 
     def test_section_aware_split_records_section_context(self):
         manuscript = (
-            "INTRODUCTION\\n" + ("Introductory material. " * 300) + "\\n"
-            "LITERATURE REVIEW\\n" + ("Literature material. " * 300)
+            "INTRODUCTION\n" + ("Introductory material. " * 300) + "\n"
+            "LITERATURE REVIEW\n" + ("Literature material. " * 300)
         )
         chunks = _split_manuscript_into_sections(manuscript, max_chars=8_000)
 
