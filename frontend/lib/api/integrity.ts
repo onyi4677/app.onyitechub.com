@@ -78,6 +78,9 @@ export type IntegrityAiReport = {
   limitations: string[];
   model_id: string;
   reviewed_at: string;
+  review_segments?: number;
+  total_segments?: number;
+  review_complete?: boolean;
   citation_verification?: CitationVerificationReport;
 };
 
