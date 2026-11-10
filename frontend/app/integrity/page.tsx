@@ -279,7 +279,8 @@ export default function ResearchIntegrityPage() {
                     {report && (
                       <div className="integrity-report">
                         <strong>Initial document report</strong>
-                        <p className="muted">{report.word_count.toLocaleString()} words · {report.detected_sections.length} detected sections · {report.findings.length} findings</p>
+                        <p className="muted">Extracted text: {report.word_count.toLocaleString()} words · {report.detected_sections.length} detected sections · {report.findings.length} deterministic findings</p>
+                        <p className="muted">Word count is calculated from extracted manuscript text and may differ from Microsoft Word's count.</p>
                         {documentType && (
                           <div className="integrity-classification">
                             <strong>Detected document type: {documentType.label}</strong>
@@ -359,6 +360,10 @@ export default function ResearchIntegrityPage() {
                             <strong>AI-assisted academic review</strong>
                             <p className="muted">Document type: {aiReport.document_type} · Academic level: {aiReport.academic_level}</p>
                             <p>{aiReport.summary}</p>
+                            <p className="muted">
+                              Segment coverage: {aiReport.review_segments ?? "not recorded"} of {aiReport.total_segments ?? "not recorded"} segments reviewed
+                              {aiReport.review_complete === true ? " · Complete consolidated review" : aiReport.review_complete === false ? " · Incomplete review — do not treat as a full manuscript assessment" : " · Coverage status not recorded"}
+                            </p>
                             {aiCitation && (
                               <div className="integrity-classification">
                                 <strong>Citation and reference verification summary</strong>
