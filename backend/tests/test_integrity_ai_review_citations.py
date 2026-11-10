@@ -2,6 +2,7 @@ import unittest
 
 from app.services.integrity_ai_review import (
     MAX_AI_REVIEW_CHARS,
+    _combine_chunk_reports,
     _enforce_deterministic_citation_findings,
     _split_manuscript_into_sections,
 )
@@ -48,6 +49,41 @@ class DeterministicCitationFindingTests(unittest.TestCase):
 
     def test_ai_review_limit_is_150000_characters(self):
         self.assertEqual(MAX_AI_REVIEW_CHARS, 150_000)
+
+    def test_combines_all_segments_and_removes_segment_local_limitations(self):
+        reports = [
+            {
+                "summary": "Opening reviewed.",
+                "document_type": "Review paper",
+                "academic_level": "Not specified",
+                "findings": [],
+                "limitations": ["Only segment 1 of 2 was reviewed."],
+            },
+            {
+                "summary": "Conclusion reviewed.",
+                "document_type": "Review paper",
+                "academic_level": "Not specified",
+                "findings": [],
+                "limitations": ["The source does not state the sampling frame."],
+            },
+        ]
+
+        result = _combine_chunk_reports(reports, expected_segment_count=2)
+
+        self.assertEqual(result["review_segments"], 2)
+        self.assertEqual(result["total_segments"], 2)
+        self.assertTrue(result["review_complete"])
+        self.assertEqual(
+            result["limitations"],
+            ["The source does not state the sampling frame."],
+        )
+
+    def test_refuses_to_consolidate_an_incomplete_segment_review(self):
+        with self.assertRaisesRegex(ValueError, "1 of 2 segments"):
+            _combine_chunk_reports(
+                [{"summary": "Only one segment."}],
+                expected_segment_count=2,
+            )
 
     def test_long_manuscript_is_split_without_losing_paragraph_content(self):
         manuscript = (
