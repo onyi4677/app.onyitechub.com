@@ -1,6 +1,7 @@
 
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -402,6 +403,8 @@ def update_project(
     user: dict[str, Any] = Depends(require_user),
 ) -> dict[str, Any]:
     _require_project_access(project_id, user)
+    if not payload.title.strip() or not payload.question.strip() or not payload.discipline.strip():
+        raise HTTPException(status_code=422, detail="Project title, research question and discipline cannot be blank")
     try:
         response = projects_table.update_item(
             Key={"id": project_id},
