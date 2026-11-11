@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import Nav from "../../../components/nav";
 import ModuleCard from "../../../components/workspace/module-card";
 import { getModules, getProject, getProjectModule, updateProject } from "../../../lib/api";
@@ -62,7 +63,7 @@ export default function ProjectPage() {
     setEditing(true);
   }
 
-  async function handleProjectUpdate(event: React.FormEvent<HTMLFormElement>) {
+  async function handleProjectUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaveError("");
     setSaveMessage("");
