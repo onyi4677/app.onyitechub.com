@@ -43,6 +43,12 @@ class ProjectCreateRequest(BaseModel):
     discipline: str = Field(min_length=1, max_length=100)
 
 
+class ProjectUpdateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    question: str = Field(min_length=1, max_length=100_000)
+    discipline: str = Field(min_length=1, max_length=100)
+
+
 class ModuleUpdateRequest(BaseModel):
     content: dict[str, Any]
 
@@ -387,6 +393,47 @@ def list_projects(user: dict[str, Any] = Depends(require_user)) -> dict[str, Any
 def get_project(project_id: str, user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
     project = _require_project_access(project_id, user)
     return {"project": _public_project(project)}
+
+
+@router.put("/projects/{project_id}")
+def update_project(
+    project_id: str,
+    payload: ProjectUpdateRequest,
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
+    _require_project_access(project_id, user)
+    try:
+        response = projects_table.update_item(
+            Key={"id": project_id},
+            UpdateExpression=(
+                "SET #title = :title, #question = :question, "
+                "#discipline = :discipline, updated_at = :updated_at"
+            ),
+            ConditionExpression="owner_sub = :owner AND attribute_exists(id)",
+            ExpressionAttributeNames={
+                "#title": "title",
+                "#question": "question",
+                "#discipline": "discipline",
+            },
+            ExpressionAttributeValues={
+                ":title": payload.title.strip(),
+                ":question": payload.question.strip(),
+                ":discipline": payload.discipline.strip(),
+                ":updated_at": datetime.now(timezone.utc).isoformat(),
+                ":owner": user["sub"],
+            },
+            ReturnValues="ALL_NEW",
+        )
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code")
+        if code == "ConditionalCheckFailedException":
+            raise HTTPException(status_code=404, detail="Project not found") from exc
+        raise HTTPException(status_code=500, detail="Unable to update project") from exc
+
+    updated_project = response.get("Attributes") or {}
+    if not updated_project:
+        raise HTTPException(status_code=500, detail="Project update returned no project record")
+    return {"project": _public_project(updated_project)}
 
 
 @router.get("/projects/{project_id}/research-sources")
