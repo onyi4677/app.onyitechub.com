@@ -15,3 +15,14 @@ export async function createProject(input: Omit<Project, "id" | "status" | "modu
 export async function getProject(id: string) {
   return apiRequest<{ project: Project }>(`/api/projects/${encodeURIComponent(id)}`);
 }
+
+ 
+export async function updateProject(
+  id: string,
+  input: Pick<Project, "title" | "question" | "discipline">,
+) {
+  return apiRequest<{ project: Project }>(`/api/projects/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}

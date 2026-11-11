@@ -1,9 +1,10 @@
-name: Deploy Citation Verification to Staging
+name: Deploy Backend to Isolated Staging
 
 on:
   push:
     branches:
       - feat/citation-reference-verification
+      - feature/project-topic-editing
     paths:
       - "backend/**"
       - ".github/workflows/deploy-staging-lambda.yml"
