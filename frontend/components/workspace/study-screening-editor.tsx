@@ -160,14 +160,16 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
       const citation = importedCitation(row);
       const doiKey = normalizeDoi(citation.doi);
       const titleKey = normalizeIdentity(citation.title);
-      const { id: sourceId } = await sourceForRow(row);
-      const alreadyLinked = nextRecords.some((record) => record.source_id === sourceId);
       const sameWork = nextRecords.some((record) => {
         const meta = record.imported_metadata || {};
         const existingDoi = normalizeDoi(meta.DOI || "");
-        return (doiKey && existingDoi === doiKey) || (!doiKey && titleKey && normalizeIdentity(meta["Candidate study"] || record.title_snapshot) === titleKey);
+        const existingTitle = meta["Candidate study"] ? importedCitation(meta).title : record.title_snapshot;
+        return (doiKey && existingDoi === doiKey) || (titleKey && normalizeIdentity(existingTitle) === titleKey);
       });
-      if (alreadyLinked || sameWork) { skipped++; continue; }
+      if (sameWork) { skipped++; continue; }
+      const { id: sourceId } = await sourceForRow(row);
+      const alreadyLinked = nextRecords.some((record) => record.source_id === sourceId);
+      if (alreadyLinked) { skipped++; continue; }
       const status = (row["Decision status"] || "").trim().toLowerCase();
       const taDecision: TADecision = status.startsWith("exclude") ? "exclude" : status.includes("provisional") ? "maybe" : status.startsWith("include") ? "include" : "not_screened";
       const importedRecord: RecordItem = {
