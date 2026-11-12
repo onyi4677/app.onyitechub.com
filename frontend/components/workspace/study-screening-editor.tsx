@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createProjectLiteratureSource, getProjectModule, getProjectResearchSources, saveProjectModule, type CanonicalResearchSource } from "../../lib/api/modules";
+import { getProjectModule, getProjectResearchSources, saveProjectModule, type CanonicalResearchSource } from "../../lib/api/modules";
+import { addLiteratureSource } from "../../lib/api/literature";
 import StudyScreeningExcelImport from "./study-screening-excel-import";
 import type { ScreeningWorkbook } from "./study-screening-xlsx";
 
@@ -143,14 +144,14 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
       if (found) return { id: found.canonical_source_id };
       const localKey = doiKey ? "doi:" + doiKey : "title:" + titleKey;
       if (createdSources.has(localKey)) return { id: createdSources.get(localKey) as string };
-      const created = await createProjectLiteratureSource(projectId, {
+      const created = await addLiteratureSource(projectId, {
         authors: citation.authors, year: citation.year, title: citation.title || citation.citation,
         source_type: "journal_article", journal_or_publisher: row["Publication details"] || null,
         doi: citation.doi || null, url: citation.url || null,
         abstract: [row["Population / setting"], row["Study design / sample"]].filter(Boolean).join("\n\n"),
-        verified: false,
+        keywords: [], verified: false,
       });
-      const id = created.source.source_id || created.source.canonical_source_id;
+      const id = created.source.source_id;
       if (!id) throw new Error("A new source was created but no source ID was returned. Refresh the source registry before retrying.");
       createdSources.set(localKey, id);
       return { id };
