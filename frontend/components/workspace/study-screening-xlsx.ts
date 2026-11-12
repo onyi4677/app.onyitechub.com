@@ -23,17 +23,18 @@ async function unzipEntries(buffer: ArrayBuffer) {
   if (eocd < 0) throw new Error("This file is not a valid .xlsx workbook.");
   const count = view.getUint16(eocd + 10, true);
   let cursor = view.getUint32(eocd + 16, true);
-  const entries = new Map<string, { method: number; size: number; offset: number }>();
+  const entries = new Map<string, { method: number; size: number; compressedSize: number; offset: number }>();
   for (let i = 0; i < count; i++) {
     if (view.getUint32(cursor, true) !== 0x02014b50) throw new Error("The Excel archive directory is damaged.");
     const method = view.getUint16(cursor + 10, true);
-    const size = view.getUint32(cursor + 20, true);
+    const compressedSize = view.getUint32(cursor + 20, true);
+    const size = view.getUint32(cursor + 24, true);
     const nameLength = view.getUint16(cursor + 28, true);
     const extraLength = view.getUint16(cursor + 30, true);
     const commentLength = view.getUint16(cursor + 32, true);
     const offset = view.getUint32(cursor + 42, true);
     const name = decoder.decode(new Uint8Array(buffer, cursor + 46, nameLength));
-    entries.set(name, { method, size, offset });
+    entries.set(name, { method, size, compressedSize, offset });
     cursor += 46 + nameLength + extraLength + commentLength;
   }
   return async (name: string): Promise<string> => {
@@ -43,8 +44,7 @@ async function unzipEntries(buffer: ArrayBuffer) {
     const nameLength = view.getUint16(start + 26, true);
     const extraLength = view.getUint16(start + 28, true);
     const dataStart = start + 30 + nameLength + extraLength;
-    const compressedSize = view.getUint32(entries.get(name)!.offset + 18, true);
-    const compressed = new Uint8Array(buffer, dataStart, compressedSize);
+    const compressed = new Uint8Array(buffer, dataStart, entry.compressedSize);
     let bytes: Uint8Array;
     if (entry.method === 0) bytes = compressed;
     else if (entry.method === 8) {
