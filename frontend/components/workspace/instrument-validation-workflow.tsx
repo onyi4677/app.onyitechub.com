@@ -16,6 +16,7 @@ type ReviewEntry = {
   review_date: string;
   comments: string;
   recommendation: string;
+  item_ratings: Record<string, { clarity: number; relevance: number; coverage: number; comments: string }>;
 };
 type ValidationRecord = {
   validation_id: string;
@@ -41,9 +42,10 @@ type ValidationRecord = {
   decision_date: string;
 };
 
-const emptyReview = (): ReviewEntry => ({
+const emptyReview = (itemIds: string[] = []): ReviewEntry => ({
   reviewer_name: "", reviewer_role: "", expertise: "", review_date: "",
   comments: "", recommendation: "revise",
+  item_ratings: Object.fromEntries(itemIds.map((id) => [id, { clarity: 0, relevance: 0, coverage: 0, comments: "" }])),
 });
 
 function newValidation(version: InstrumentVersion, pathway: Pathway): ValidationRecord {
@@ -107,7 +109,12 @@ export default function InstrumentValidationWorkflow({
   }
 
   function addReviewer() {
-    if (draft) update("expert_reviews", [...draft.expert_reviews, emptyReview()]);
+    if (!draft || !selectedVersion) return;
+    const items = Array.isArray(selectedVersion.snapshot.instrument_items)
+      ? selectedVersion.snapshot.instrument_items as Array<Record<string, unknown>> : [];
+    update("expert_reviews", [...draft.expert_reviews, emptyReview(items.map((item, index) =>
+      typeof item.item_id === "string" ? item.item_id : "item-" + (index + 1)
+    ))]);
   }
 
   function updateReviewer(index: number, patch: Partial<ReviewEntry>) {
@@ -120,9 +127,10 @@ export default function InstrumentValidationWorkflow({
     const candidate = { ...draft, status: nextStatus ?? draft.status };
     if (candidate.status === "validated") {
       const hasExpertReview = candidate.expert_reviews.some((review) =>
-        review.reviewer_name.trim() && review.comments.trim() && review.recommendation
+        review.reviewer_name.trim() && review.reviewer_role.trim() && review.expertise.trim() &&
+        review.review_date && review.comments.trim() && review.recommendation
       );
-      const hasPilotEvidence = Number(candidate.pilot_sample_size) > 0 && candidate.pilot_findings.trim();
+      const hasPilotEvidence = Number(candidate.pilot_sample_size) > 0 && candidate.pilot_method.trim() && candidate.pilot_findings.trim();
       const hasMethodSpecificEvidence = pathway === "primary_data"
         ? (candidate.reliability_method.trim() && candidate.reliability_result.trim()) || candidate.reliability_notes.trim()
         : (candidate.second_reviewer.trim() && candidate.agreement_method.trim() && candidate.agreement_result.trim()) || candidate.disagreement_resolution.trim();
@@ -215,10 +223,68 @@ export default function InstrumentValidationWorkflow({
                         <option value="reject">Do not accept</option>
                       </select>
                     </label>
+                    <div className="editor-section">
+                      <strong>Item-level assessment · 4-point rating scale</strong>
+                      <p className="muted">Rate each item for clarity, relevance and coverage: 1 = not adequate, 2 = needs major revision, 3 = adequate, 4 = highly adequate. Leave unrated if the reviewer has not assessed that item.</p>
+                      {(Array.isArray(selectedVersion.snapshot.instrument_items) ? selectedVersion.snapshot.instrument_items as Array<Record<string, unknown>> : []).map((item, itemIndex) => {
+                        const itemId = typeof item.item_id === "string" ? item.item_id : "item-" + (itemIndex + 1);
+                        const rating = review.item_ratings?.[itemId] ?? { clarity: 0, relevance: 0, coverage: 0, comments: "" };
+                        return (
+                          <div className="card editor-section" key={itemId}>
+                            <strong>{itemIndex + 1}. {String(item.prompt ?? "Untitled item")}</strong>
+                            {(["clarity", "relevance", "coverage"] as const).map((criterion) => (
+                              <label key={criterion}>{criterion.charAt(0).toUpperCase() + criterion.slice(1)}
+                                <select value={rating[criterion]} onChange={(event) => updateReviewer(index, {
+                                  item_ratings: {
+                                    ...review.item_ratings,
+                                    [itemId]: { ...rating, [criterion]: Number(event.target.value) },
+                                  },
+                                })}>
+                                  <option value={0}>Not rated</option>
+                                  <option value={1}>1 — Not adequate</option>
+                                  <option value={2}>2 — Major revision needed</option>
+                                  <option value={3}>3 — Adequate</option>
+                                  <option value={4}>4 — Highly adequate</option>
+                                </select>
+                              </label>
+                            ))}
+                            <label>Item-specific comment
+                              <textarea rows={2} value={rating.comments} onChange={(event) => updateReviewer(index, {
+                                item_ratings: {
+                                  ...review.item_ratings,
+                                  [itemId]: { ...rating, comments: event.target.value },
+                                },
+                              })} />
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
                     <button className="button" type="button" onClick={() => update("expert_reviews", draft.expert_reviews.filter((_, i) => i !== index))}>Remove reviewer</button>
                   </div>
                 ))}
                 <button className="button" type="button" onClick={addReviewer}>Add expert reviewer</button>
+                {(() => {
+                  const items = Array.isArray(selectedVersion.snapshot.instrument_items)
+                    ? selectedVersion.snapshot.instrument_items as Array<Record<string, unknown>> : [];
+                  const itemCvi = items.map((item, itemIndex) => {
+                    const itemId = typeof item.item_id === "string" ? item.item_id : "item-" + (itemIndex + 1);
+                    const ratings = draft.expert_reviews
+                      .map((review) => review.item_ratings?.[itemId]?.relevance ?? 0)
+                      .filter((rating) => rating > 0);
+                    return { itemId, prompt: String(item.prompt ?? "Untitled item"), ratings, cvi: ratings.length ? ratings.filter((rating) => rating >= 3).length / ratings.length : null };
+                  });
+                  const available = itemCvi.filter((item) => item.cvi !== null);
+                  const scaleAverage = available.length ? available.reduce((sum, item) => sum + (item.cvi ?? 0), 0) / available.length : null;
+                  return (
+                    <div className="notice">
+                      <strong>Content validity summary (4-point relevance ratings)</strong>
+                      <p className="muted">I-CVI is the proportion of submitted relevance ratings of 3 or 4 for an item. S-CVI/Ave is the mean I-CVI across items with ratings. These are descriptive calculations; interpret them using a declared method and the number of reviewers, not as an automatic pass/fail.</p>
+                      {itemCvi.map((item) => <p key={item.itemId}>{item.prompt}: {item.cvi === null ? "Not yet rated" : item.cvi.toFixed(2) + " (I-CVI; n=" + item.ratings.length + ")"}</p>)}
+                      <strong>S-CVI/Ave: {scaleAverage === null ? "Not yet available" : scaleAverage.toFixed(2)}</strong>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="card editor-section">
