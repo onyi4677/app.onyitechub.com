@@ -100,6 +100,15 @@ function normalize(data: Record<string, unknown>, pathway: InstrumentForm["resea
   };
 }
 
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return "[" + value.map(stableStringify).join(",") + "]";
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return "{" + Object.keys(record).sort().map((key) => JSON.stringify(key) + ":" + stableStringify(record[key])).join(",") + "}";
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
 function newItem(): InstrumentItem {
   return {
     item_id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `item-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -203,7 +212,7 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
         instrument_instructions: form.instrument_instructions, instrument_items: form.instrument_items,
       };
       const latestVersion = existingVersions[existingVersions.length - 1];
-      const sameAsLatest = !!latestVersion && JSON.stringify(latestVersion.snapshot) === JSON.stringify(instrumentSnapshot);
+      const sameAsLatest = !!latestVersion && stableStringify(latestVersion.snapshot) === stableStringify(instrumentSnapshot);
       const instrumentVersions = sameAsLatest ? existingVersions : [
         ...existingVersions,
         {
