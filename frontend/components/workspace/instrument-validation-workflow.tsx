@@ -75,6 +75,160 @@ function newValidation(version: InstrumentVersion, pathway: Pathway): Validation
   };
 }
 
+function reviewText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function escapeHtml(value) {
+  return reviewText(value).replace(/[&<>"']/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[character] || character);
+}
+
+function escapeRtf(value) {
+  let output = "";
+  for (const character of reviewText(value)) {
+    if (character === "\\") output += "\\\\";
+    else if (character === "{") output += "\\{";
+    else if (character === "}") output += "\\}";
+    else if (character === "\n") output += "\\line ";
+    else {
+      const code = character.codePointAt(0) || 0;
+      if (code >= 32 && code <= 126) output += character;
+      else if (code <= 65535) output += "\\u" + (code > 32767 ? code - 65536 : code) + "?";
+      else {
+        const adjusted = code - 65536;
+        const high = 55296 + (adjusted >> 10);
+        const low = 56320 + (adjusted & 1023);
+        output += "\\u" + (high > 32767 ? high - 65536 : high) + "?\\u" + (low > 32767 ? low - 65536 : low) + "?";
+      }
+    }
+  }
+  return output;
+}
+
+function htmlItemsForOne(item, index) {
+  const options = Array.isArray(item.options) ? item.options.map(option => "<li>" + escapeHtml(option) + "</li>").join("") : "";
+  return "<article class=\"item\"><h3>" + (index + 1) + ". " + escapeHtml(item.prompt) + "</h3>" +
+    "<p><strong>Response format:</strong> " + escapeHtml(item.response_type) + (item.required === true ? " · Required" : "") + "</p>" +
+    (options ? "<p><strong>Response options:</strong></p><ul>" + options + "</ul>" : "") +
+    (reviewText(item.help_text) ? "<p><strong>Help text:</strong> " + escapeHtml(item.help_text) + "</p>" : "") +
+    "<table><thead><tr><th>Criterion</th><th>1</th><th>2</th><th>3</th><th>4</th></tr></thead><tbody>" +
+    ["Clarity","Relevance","Coverage"].map(criterion => "<tr><td>" + criterion + "</td><td>☐</td><td>☐</td><td>☐</td><td>☐</td></tr>").join("") +
+    "</tbody></table><p><strong>Item-specific comments / suggested revision:</strong></p><div class=\"writing-space\"></div></article>";
+}
+
+function buildReviewerDocument(version, pathway) {
+  const snapshot = version.snapshot;
+  const sections = Array.isArray(snapshot.instrument_sections) ? snapshot.instrument_sections : [];
+  const items = Array.isArray(snapshot.instrument_items) ? snapshot.instrument_items : [];
+  const title = reviewText(snapshot.instrument_title) || "Research instrument";
+  const ratingGuide = "Rate each criterion from 1 to 4: 1 = Not adequate; 2 = Needs major revision; 3 = Adequate; 4 = Highly adequate.";
+  const sectionItems = sections.map(section => {
+    const matching = items.map((item,index) => ({item,index})).filter(entry => String(entry.item.section_id || "") === String(section.section_id || ""));
+    return "<h2>" + escapeHtml(section.title) + "</h2>" +
+      (reviewText(section.description) ? "<p>" + escapeHtml(section.description) + "</p>" : "") +
+      matching.map(entry => htmlItemsForOne(entry.item,entry.index)).join("");
+  }).join("");
+  const unassigned = items.map((item,index) => ({item,index})).filter(entry =>
+    !sections.some(section => String(section.section_id || "") === String(entry.item.section_id || ""))
+  );
+  const html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Expert Content Validation - " + escapeHtml(title) + "</title>" +
+    "<style>body{font-family:Arial,sans-serif;color:#171717;line-height:1.45;margin:32px;font-size:11pt}" +
+    "h1{font-size:19pt;margin-bottom:5px}h2{font-size:14pt;margin-top:24px;border-bottom:1px solid #777;padding-bottom:4px}" +
+    "h3{font-size:12pt;margin-bottom:6px}.field{margin:12px 0}.line{display:inline-block;border-bottom:1px solid #555;min-width:220px;height:20px}" +
+    ".item{page-break-inside:avoid;border:1px solid #bbb;padding:14px;margin:18px 0}table{border-collapse:collapse;width:100%;margin:10px 0}" +
+    "th,td{border:1px solid #777;padding:7px;text-align:center}td:first-child,th:first-child{text-align:left}" +
+    ".writing-space{height:54px;border-bottom:1px solid #aaa}.large-space{height:90px;border-bottom:1px solid #aaa}" +
+    "@media print{body{margin:18mm}.item{break-inside:avoid}}</style></head><body>" +
+    "<h1>Expert Review and Content Validation Form</h1><p><strong>Research instrument:</strong> " + escapeHtml(title) + "</p>" +
+    "<p><strong>Instrument version:</strong> " + version.version_number + " &nbsp; | &nbsp; <strong>Pathway:</strong> " + (pathway === "primary_data" ? "Primary data" : "Secondary data") + "</p>" +
+    "<p><strong>Purpose:</strong> " + escapeHtml(snapshot.purpose) + "</p>" +
+    "<p><strong>Target population / evidence population:</strong> " + escapeHtml(snapshot.target_population) + "</p>" +
+    "<p><strong>Research context:</strong> " + escapeHtml(snapshot.research_context) + "</p>" +
+    "<h2>Part A — Reviewer information</h2>" +
+    ["Reviewer full name","Academic / professional qualification","Institution / affiliation","Area of expertise","Email address","Date of review"].map(label => "<p class=\"field\"><strong>" + label + ":</strong> <span class=\"line\"></span></p>").join("") +
+    "<h2>Part B — Instructions</h2><p>Review the instrument as a whole and assess every item for clarity, relevance to the study purpose, and coverage of the construct or information required. Mark one rating for each criterion. Use the comments space to identify ambiguous wording, missing content, duplication, response-option problems, or recommended revisions.</p>" +
+    "<p><strong>" + ratingGuide + "</strong></p>" +
+    (reviewText(snapshot.instrument_instructions) ? "<p><strong>Instrument instructions:</strong> " + escapeHtml(snapshot.instrument_instructions) + "</p>" : "") +
+    "<h2>Part C — Item-by-item assessment</h2>" + sectionItems +
+    (unassigned.length ? "<h2>Unassigned items</h2>" + unassigned.map(entry => htmlItemsForOne(entry.item,entry.index)).join("") : "") +
+    "<h2>Part D — Overall assessment</h2><p>Overall recommendation (select one):</p>" +
+    "<p>☐ Accept as presented &nbsp;&nbsp; ☐ Accept with minor revisions &nbsp;&nbsp; ☐ Major revisions required &nbsp;&nbsp; ☐ Not suitable in its present form</p>" +
+    "<p><strong>Strengths of the instrument:</strong></p><div class=\"large-space\"></div>" +
+    "<p><strong>Important omissions or concerns:</strong></p><div class=\"large-space\"></div>" +
+    "<p><strong>General recommendations:</strong></p><div class=\"large-space\"></div>" +
+    "<p class=\"field\"><strong>Reviewer signature:</strong> <span class=\"line\"></span> &nbsp; <strong>Date:</strong> <span class=\"line\"></span></p>" +
+    "<p>This form records expert content review. It does not by itself establish empirical reliability, construct validity, or final scientific validation.</p></body></html>";
+  const lines = [
+    "EXPERT REVIEW AND CONTENT VALIDATION FORM",
+    "Research instrument: " + title,
+    "Instrument version: " + version.version_number + " | Pathway: " + (pathway === "primary_data" ? "Primary data" : "Secondary data"),
+    "Purpose: " + reviewText(snapshot.purpose),
+    "Target population / evidence population: " + reviewText(snapshot.target_population),
+    "Research context: " + reviewText(snapshot.research_context),
+    "",
+    "PART A — REVIEWER INFORMATION",
+    "Reviewer full name: ______________________________________________",
+    "Academic / professional qualification: ______________________________",
+    "Institution / affiliation: __________________________________________",
+    "Area of expertise: ________________________________________________",
+    "Email address: __________________________ Date of review: ___________",
+    "",
+    "PART B — INSTRUCTIONS",
+    "Assess every item for clarity, relevance and coverage. Mark one rating for each criterion and use the comments space for suggested changes.",
+    ratingGuide,
+    reviewText(snapshot.instrument_instructions) ? "Instrument instructions: " + reviewText(snapshot.instrument_instructions) : "",
+    "",
+    "PART C — ITEM-BY-ITEM ASSESSMENT"
+  ];
+  items.forEach((item,index) => {
+    const section = sections.find(entry => String(entry.section_id || "") === String(item.section_id || ""));
+    lines.push("", section ? reviewText(section.title) : "Unassigned items", (index + 1) + ". " + reviewText(item.prompt),
+      "Response format: " + reviewText(item.response_type) + (item.required === true ? " | Required" : ""));
+    if (Array.isArray(item.options) && item.options.length) lines.push("Response options: " + item.options.join("; "));
+    if (reviewText(item.help_text)) lines.push("Help text: " + reviewText(item.help_text));
+    lines.push("Clarity: 1 ___ 2 ___ 3 ___ 4 ___","Relevance: 1 ___ 2 ___ 3 ___ 4 ___",
+      "Coverage: 1 ___ 2 ___ 3 ___ 4 ___","Item-specific comments / suggested revision:",
+      "________________________________________________________________","________________________________________________________________");
+  });
+  lines.push("", "PART D — OVERALL ASSESSMENT",
+    "Overall recommendation: [ ] Accept  [ ] Minor revisions  [ ] Major revisions  [ ] Not suitable",
+    "Strengths of the instrument:","________________________________________________________________","________________________________________________________________",
+    "Important omissions or concerns:","________________________________________________________________","________________________________________________________________",
+    "General recommendations:","________________________________________________________________","________________________________________________________________",
+    "Reviewer signature: ______________________________ Date: ___________","",
+    "This form records expert content review. It does not by itself establish empirical reliability, construct validity, or final scientific validation.");
+  const rtf = "{\\rtf1\\ansi\\deff0\\uc1{\\fonttbl{\\f0 Arial;}}\\viewkind4\\f0\\fs22 " +
+    lines.map(line => escapeRtf(line) + "\\par").join(" ") + "}";
+  return {html,rtf};
+}
+
+function downloadReviewerWord(version, pathway) {
+  const doc = buildReviewerDocument(version,pathway);
+  const blob = new Blob([doc.rtf],{type:"application/rtf;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+  anchor.href = url;
+  anchor.download = "expert-content-validation-v" + version.version_number + ".rtf";
+  window.document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function printReviewerPdf(version, pathway) {
+  const doc = buildReviewerDocument(version,pathway);
+  const printWindow = window.open("","_blank");
+  if (!printWindow) {
+    window.alert("Please allow pop-ups for this site, then select Print / Save PDF again.");
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(doc.html);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.onload = () => printWindow.print();
+}
+
 export default function InstrumentValidationWorkflow({
   projectId, pathway, versions, records, onSave,
 }: {
@@ -207,6 +361,16 @@ export default function InstrumentValidationWorkflow({
           {selectedVersion && (
             <div className="notice">
               <strong>Version {selectedVersion.version_number} snapshot:</strong> {String(selectedVersion.snapshot.instrument_title ?? "Untitled instrument")} · {Array.isArray(selectedVersion.snapshot.instrument_items) ? selectedVersion.snapshot.instrument_items.length : 0} items
+            </div>
+          )}
+          {selectedVersion && (
+            <div className="editor-actions">
+              <button className="button" type="button" onClick={() => downloadReviewerWord(selectedVersion, pathway)}>
+                Download reviewer form (Word-compatible .rtf)
+              </button>
+              <button className="button" type="button" onClick={() => printReviewerPdf(selectedVersion, pathway)}>
+                Print / Save reviewer form as PDF
+              </button>
             </div>
           )}
           {selectedVersion && (
