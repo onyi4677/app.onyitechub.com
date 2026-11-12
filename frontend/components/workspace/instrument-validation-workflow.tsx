@@ -250,7 +250,7 @@ export default function InstrumentValidationWorkflow({
                         const rating = review.item_ratings?.[itemId] ?? { clarity: 0, relevance: 0, coverage: 0, comments: "" };
                         return (
                           <div className="card editor-section" key={itemId}>
-                            {item.section_id && sectionTitles.has(String(item.section_id)) && (
+                            {item.section_id != null && sectionTitles.has(String(item.section_id)) && (
                               <p className="muted">{sectionTitles.get(String(item.section_id))}</p>
                             )}
                             <strong>{itemIndex + 1}. {String(item.prompt ?? "Untitled item")}</strong>
