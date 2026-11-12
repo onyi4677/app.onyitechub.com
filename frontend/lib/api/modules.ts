@@ -61,7 +61,7 @@ export type LiteratureSourceInput = {
 };
 
 export async function createProjectLiteratureSource(id: string, source: LiteratureSourceInput) {
-  return apiRequest<{ status: string; source: CanonicalResearchSource }>(
+  return apiRequest<{ status: string; source: Pick<CanonicalResearchSource, "source_id"> & Partial<CanonicalResearchSource> }>(
     `/api/projects/${encodeURIComponent(id)}/literature/sources`,
     { method: "POST", body: JSON.stringify(source) }
   );
