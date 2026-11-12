@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getProjectModule, saveProjectModule } from "../../lib/api";
+import InstrumentValidationWorkflow from "./instrument-validation-workflow";
 
 type InstrumentItem = {
   item_id: string;
@@ -188,14 +189,42 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
     setMessage("");
     setError("");
     try {
-      const pathwayForm = { ...form, research_pathway: activePathway, status, schema_version: 2 };
+      const existingPathways = existingData.pathways && typeof existingData.pathways === "object"
+        ? existingData.pathways as Record<string, unknown> : {};
+      const existingPathway = existingPathways[activePathway] && typeof existingPathways[activePathway] === "object"
+        ? existingPathways[activePathway] as Record<string, unknown> : {};
+      const existingVersions = Array.isArray(existingPathway.instrument_versions)
+        ? existingPathway.instrument_versions as Array<Record<string, unknown>> : [];
+      const instrumentSnapshot = {
+        instrument_title: form.instrument_title, instrument_type: form.instrument_type, purpose: form.purpose,
+        target_population: form.target_population, research_context: form.research_context,
+        administration_mode: form.administration_mode, consent_plan: form.consent_plan,
+        provenance: form.provenance, provenance_details: form.provenance_details,
+        instrument_instructions: form.instrument_instructions, instrument_items: form.instrument_items,
+      };
+      const latestVersion = existingVersions[existingVersions.length - 1];
+      const sameAsLatest = !!latestVersion && JSON.stringify(latestVersion.snapshot) === JSON.stringify(instrumentSnapshot);
+      const instrumentVersions = sameAsLatest ? existingVersions : [
+        ...existingVersions,
+        {
+          version_id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "version-" + Date.now(),
+          version_number: existingVersions.length + 1,
+          created_at: new Date().toISOString(),
+          snapshot: instrumentSnapshot,
+        },
+      ];
+      const pathwayForm = {
+        ...form, research_pathway: activePathway, status, schema_version: 3,
+        instrument_versions: instrumentVersions,
+        validation_records: Array.isArray(existingPathway.validation_records) ? existingPathway.validation_records : [],
+      };
       const nextForms = { ...forms, [activePathway]: pathwayForm };
       const pathways = {
         ...(existingData.pathways && typeof existingData.pathways === "object"
           ? existingData.pathways as Record<string, unknown> : {}),
         [activePathway]: pathwayForm,
       };
-      const payload = { ...existingData, ...pathwayForm, research_pathway: activePathway, pathways, schema_version: 2 };
+      const payload = { ...existingData, ...pathwayForm, research_pathway: activePathway, pathways, schema_version: 3 };
       const result = await saveProjectModule(projectId, "instruments", payload);
       const saved = result.content && typeof result.content === "object" ? result.content : payload;
       setExistingData(saved);
@@ -206,6 +235,19 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveValidationRecords(nextRecords: Array<Record<string, unknown>>) {
+    const currentPathways = existingData.pathways && typeof existingData.pathways === "object"
+      ? existingData.pathways as Record<string, unknown> : {};
+    const currentPathway = currentPathways[activePathway] && typeof currentPathways[activePathway] === "object"
+      ? currentPathways[activePathway] as Record<string, unknown> : {};
+    const updatedPathway = { ...currentPathway, validation_records: nextRecords };
+    const pathways = { ...currentPathways, [activePathway]: updatedPathway };
+    const payload = { ...existingData, ...updatedPathway, research_pathway: activePathway, pathways, schema_version: 3 };
+    const result = await saveProjectModule(projectId, "instruments", payload);
+    const saved = result.content && typeof result.content === "object" ? result.content : payload;
+    setExistingData(saved);
   }
 
   if (loading) return <div className="card module-workspace"><p>Loading Instruments &amp; Data Collection...</p></div>;
@@ -328,6 +370,17 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
         </div>
         <p className="muted">This first builder stores structured instrument items in the existing project module. Section grouping, validation workflows and online respondent delivery will follow in later milestones.</p>
       </div>
+
+      <InstrumentValidationWorkflow
+        pathway={activePathway}
+        versions={(existingData.pathways && typeof existingData.pathways === "object"
+          ? ((existingData.pathways as Record<string, unknown>)[activePathway] as Record<string, unknown> | undefined)?.instrument_versions
+          : undefined) as Parameters<typeof InstrumentValidationWorkflow>[0]["versions"] ?? []}
+        records={(existingData.pathways && typeof existingData.pathways === "object"
+          ? ((existingData.pathways as Record<string, unknown>)[activePathway] as Record<string, unknown> | undefined)?.validation_records
+          : undefined) as Parameters<typeof InstrumentValidationWorkflow>[0]["records"] ?? []}
+        onSave={saveValidationRecords}
+      />
 
       <div className="card editor-section">
         <div className="eyebrow">Instrument provenance</div>
