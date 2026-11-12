@@ -4,8 +4,15 @@ import { useEffect, useState } from "react";
 import { getProjectModule, saveProjectModule } from "../../lib/api";
 import InstrumentValidationWorkflow from "./instrument-validation-workflow";
 
+type InstrumentSection = {
+  section_id: string;
+  title: string;
+  description: string;
+};
+
 type InstrumentItem = {
   item_id: string;
+  section_id: string;
   prompt: string;
   response_type: "short_text" | "long_text" | "single_choice" | "multiple_choice" | "dropdown" | "number" | "date" | "likert_5";
   required: boolean;
@@ -26,6 +33,7 @@ type InstrumentForm = {
   provenance_details: string;
   status: string;
   instrument_instructions: string;
+  instrument_sections: InstrumentSection[];
   instrument_items: InstrumentItem[];
 };
 
@@ -42,6 +50,7 @@ const emptyForm = (): InstrumentForm => ({
   provenance_details: "",
   status: "draft",
   instrument_instructions: "",
+  instrument_sections: [],
   instrument_items: [],
 });
 
@@ -66,11 +75,22 @@ const responseTypes: Array<[InstrumentItem["response_type"], string]> = [
   ["likert_5", "5-point Likert response"],
 ];
 
+function normalizeSections(value: unknown): InstrumentSection[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((section): section is Record<string, unknown> => !!section && typeof section === "object")
+    .map((section, index) => ({
+      section_id: typeof section.section_id === "string" && section.section_id ? section.section_id : `section-${index + 1}`,
+      title: typeof section.title === "string" ? section.title : `Section ${index + 1}`,
+      description: typeof section.description === "string" ? section.description : "",
+    }));
+}
+
 function normalizeItems(value: unknown): InstrumentItem[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
     .map((item, index) => ({
       item_id: typeof item.item_id === "string" && item.item_id ? item.item_id : `item-${index + 1}`,
+      section_id: typeof item.section_id === "string" ? item.section_id : "",
       prompt: typeof item.prompt === "string" ? item.prompt : "",
       response_type: responseTypes.some(([type]) => type === item.response_type)
         ? item.response_type as InstrumentItem["response_type"] : "short_text",
@@ -96,6 +116,7 @@ function normalize(data: Record<string, unknown>, pathway: InstrumentForm["resea
     provenance_details: typeof data.provenance_details === "string" ? data.provenance_details : "",
     status: typeof data.status === "string" ? data.status : "draft",
     instrument_instructions: typeof data.instrument_instructions === "string" ? data.instrument_instructions : "",
+    instrument_sections: normalizeSections(data.instrument_sections),
     instrument_items: normalizeItems(data.instrument_items),
   };
 }
@@ -109,9 +130,20 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value) ?? "undefined";
 }
 
-function newItem(): InstrumentItem {
+function createId(prefix: string): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function newSection(): InstrumentSection {
+  return { section_id: createId("section"), title: "", description: "" };
+}
+
+function newItem(sectionId = ""): InstrumentItem {
   return {
-    item_id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `item-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    item_id: createId("item"),
+    section_id: sectionId,
     prompt: "",
     response_type: "short_text",
     required: false,
@@ -170,6 +202,19 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
     update("instrument_items", form.instrument_items.map((item) => item.item_id === itemId ? { ...item, ...patch } : item));
   }
 
+  function updateSection(sectionId: string, patch: Partial<InstrumentSection>) {
+    update("instrument_sections", form.instrument_sections.map((section) =>
+      section.section_id === sectionId ? { ...section, ...patch } : section
+    ));
+  }
+
+  function removeSection(sectionId: string) {
+    update("instrument_sections", form.instrument_sections.filter((section) => section.section_id !== sectionId));
+    update("instrument_items", form.instrument_items.map((item) =>
+      item.section_id === sectionId ? { ...item, section_id: "" } : item
+    ));
+  }
+
   function changePathway(nextPathway: InstrumentForm["research_pathway"]) {
     setActivePathway(nextPathway);
     setMessage("");
@@ -209,7 +254,8 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
         target_population: form.target_population, research_context: form.research_context,
         administration_mode: form.administration_mode, consent_plan: form.consent_plan,
         provenance: form.provenance, provenance_details: form.provenance_details,
-        instrument_instructions: form.instrument_instructions, instrument_items: form.instrument_items,
+        instrument_instructions: form.instrument_instructions, instrument_sections: form.instrument_sections,
+        instrument_items: form.instrument_items,
       };
       const latestVersion = existingVersions[existingVersions.length - 1];
       const sameAsLatest = !!latestVersion && stableStringify(latestVersion.snapshot) === stableStringify(instrumentSnapshot);
@@ -344,13 +390,38 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
         <label>Instructions shown before the instrument
           <textarea rows={3} value={form.instrument_instructions} onChange={(e) => update("instrument_instructions", e.target.value)} placeholder="Explain how the instrument should be completed, including any relevant reference period or response guidance." />
         </label>
+        <h4>Sections</h4>
+        <p className="muted">Create section headings first, then add the individual questions or extraction fields under the appropriate section. Existing items are preserved as unassigned until you place or remove them.</p>
+        {form.instrument_sections.map((section, index) => (
+          <div className="card editor-section" key={section.section_id}>
+            <div className="editor-actions">
+              <strong>Section {index + 1}</strong>
+              <button className="button" type="button" onClick={() => removeSection(section.section_id)}>Remove section</button>
+            </div>
+            <label>Section title
+              <input value={section.title} onChange={(event) => updateSection(section.section_id, { title: event.target.value })} placeholder="e.g. Section A — Demographic Information" />
+            </label>
+            <label>Section instructions or description (optional)
+              <textarea rows={2} value={section.description} onChange={(event) => updateSection(section.section_id, { description: event.target.value })} placeholder="Explain the purpose or instructions for this section." />
+            </label>
+          </div>
+        ))}
+        <div className="editor-actions">
+          <button className="button" type="button" onClick={() => update("instrument_sections", [...form.instrument_sections, newSection()])}>Add section</button>
+        </div>
         {form.instrument_items.length === 0 && <p className="muted">No questions or extraction items have been added yet.</p>}
         {form.instrument_items.map((item, index) => (
           <div className="card editor-section" key={item.item_id}>
             <div className="editor-actions">
-              <strong>Item {index + 1}</strong>
+              <strong>Question / item {index + 1}</strong>
               <button className="button" type="button" onClick={() => update("instrument_items", form.instrument_items.filter((entry) => entry.item_id !== item.item_id))}>Remove item</button>
             </div>
+            <label>Section
+              <select value={item.section_id} onChange={(event) => updateItem(item.item_id, { section_id: event.target.value })}>
+                <option value="">Unassigned / legacy item</option>
+                {form.instrument_sections.map((section) => <option key={section.section_id} value={section.section_id}>{section.title || "Untitled section"}</option>)}
+              </select>
+            </label>
             <label>Question / extraction prompt
               <textarea rows={3} value={item.prompt} onChange={(e) => updateItem(item.item_id, { prompt: e.target.value })} placeholder="Write one clear question or data-extraction field." />
             </label>
@@ -375,9 +446,9 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
           </div>
         ))}
         <div className="editor-actions">
-          <button className="button" type="button" onClick={() => update("instrument_items", [...form.instrument_items, newItem()])}>Add question / item</button>
+          <button className="button" type="button" disabled={form.instrument_sections.length === 0} onClick={() => update("instrument_items", [...form.instrument_items, newItem(form.instrument_sections[0].section_id)])}>Add question / item</button>
         </div>
-        <p className="muted">This first builder stores structured instrument items in the existing project module. Section grouping, validation workflows and online respondent delivery will follow in later milestones.</p>
+        <p className="muted">Each question is stored separately and linked to a section. Validation will assess individual questions while retaining their section context. Online respondent delivery remains a separate future milestone.</p>
       </div>
 
       <InstrumentValidationWorkflow
