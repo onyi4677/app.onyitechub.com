@@ -282,13 +282,14 @@ export default function InstrumentValidationWorkflow({
                     return { itemId, prompt: String(item.prompt ?? "Untitled item"), ratings, cvi: ratings.length ? ratings.filter((rating) => rating >= 3).length / ratings.length : null };
                   });
                   const available = itemCvi.filter((item) => item.cvi !== null);
-                  const scaleAverage = available.length ? available.reduce((sum, item) => sum + (item.cvi ?? 0), 0) / available.length : null;
+                  const scaleAverage = itemCvi.length > 0 && available.length === itemCvi.length
+                    ? available.reduce((sum, item) => sum + (item.cvi ?? 0), 0) / available.length : null;
                   return (
                     <div className="notice">
                       <strong>Content validity summary (4-point relevance ratings)</strong>
                       <p className="muted">I-CVI is the proportion of submitted relevance ratings of 3 or 4 for an item. S-CVI/Ave is the mean I-CVI across items with ratings. These are descriptive calculations; interpret them using a declared method and the number of reviewers, not as an automatic pass/fail.</p>
                       {itemCvi.map((item) => <p key={item.itemId}>{item.prompt}: {item.cvi === null ? "Not yet rated" : item.cvi.toFixed(2) + " (I-CVI; n=" + item.ratings.length + ")"}</p>)}
-                      <strong>S-CVI/Ave: {scaleAverage === null ? "Not yet available" : scaleAverage.toFixed(2)}</strong>
+                      <strong>S-CVI/Ave: {scaleAverage === null ? "Not yet available — every item needs at least one relevance rating" : scaleAverage.toFixed(2)}</strong>
                     </div>
                   );
                 })()}
