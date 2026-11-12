@@ -64,12 +64,6 @@ function xml(text: string) {
 function textOf(node: Element) {
   return Array.from(node.getElementsByTagName("t")).map((item) => item.textContent || "").join("");
 }
-function excelDate(value: string) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return value;
-  const date = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
-  return date.toISOString().slice(0, 10);
-}
 export async function readXlsx(file: File): Promise<WorkbookSheet[]> {
   if (!file.name.toLowerCase().endsWith(".xlsx")) throw new Error("Please choose an .xlsx Excel workbook (not .xls or .xlsm).");
   if (file.size > 15 * 1024 * 1024) throw new Error("The workbook is larger than the 15 MB import limit.");
