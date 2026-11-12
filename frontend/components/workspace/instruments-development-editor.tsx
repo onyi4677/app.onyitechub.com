@@ -479,6 +479,7 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
       </div>
 
       <InstrumentValidationWorkflow
+        projectId={projectId}
         pathway={activePathway}
         versions={(existingData.pathways && typeof existingData.pathways === "object"
           ? ((existingData.pathways as Record<string, unknown>)[activePathway] as Record<string, unknown> | undefined)?.instrument_versions
