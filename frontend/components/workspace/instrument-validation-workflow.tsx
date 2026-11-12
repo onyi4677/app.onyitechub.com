@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import InstrumentReviewInvitations from "./instrument-review-invitations";
 
 type Pathway = "primary_data" | "secondary_data";
 type InstrumentVersion = {
@@ -75,8 +76,9 @@ function newValidation(version: InstrumentVersion, pathway: Pathway): Validation
 }
 
 export default function InstrumentValidationWorkflow({
-  pathway, versions, records, onSave,
+  projectId, pathway, versions, records, onSave,
 }: {
+  projectId: string;
   pathway: Pathway;
   versions: InstrumentVersion[];
   records: ValidationRecord[];
@@ -132,6 +134,16 @@ export default function InstrumentValidationWorkflow({
   function updateReviewer(index: number, patch: Partial<ReviewEntry>) {
     if (!draft) return;
     update("expert_reviews", draft.expert_reviews.map((review, i) => i === index ? { ...review, ...patch } : review));
+  }
+
+  function importSubmittedReview(review: ReviewEntry) {
+    if (!selectedVersion) return;
+    setDraft((current) => {
+      const base = current ?? newValidation(selectedVersion, pathway);
+      return { ...base, expert_reviews: [...base.expert_reviews, review] };
+    });
+    setNotice("Submitted expert review imported. Save the validation record to retain it.");
+    setError("");
   }
 
   async function saveRecord(nextStatus?: ValidationRecord["status"]) {
@@ -196,6 +208,15 @@ export default function InstrumentValidationWorkflow({
             <div className="notice">
               <strong>Version {selectedVersion.version_number} snapshot:</strong> {String(selectedVersion.snapshot.instrument_title ?? "Untitled instrument")} · {Array.isArray(selectedVersion.snapshot.instrument_items) ? selectedVersion.snapshot.instrument_items.length : 0} items
             </div>
+          )}
+          {selectedVersion && (
+            <InstrumentReviewInvitations
+              projectId={projectId}
+              pathway={pathway}
+              versionId={selectedVersion.version_id}
+              versionNumber={selectedVersion.version_number}
+              onImport={importSubmittedReview}
+            />
           )}
           {!draft && selectedVersion && (
             <button className="button" type="button" onClick={() => setDraft(newValidation(selectedVersion, pathway))}>
