@@ -48,7 +48,9 @@ export default function InstrumentReviewPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const sections = useMemo(() => new Map((access?.snapshot.instrument_sections || []).map((section) => [section.section_id, section.title])), [access]);
+  const sections = useMemo(() => new Map<string, string>(
+    (access?.snapshot.instrument_sections || []).map((section): [string, string] => [section.section_id, section.title])
+  ), [access]);
 
   function updateRating(itemId: string, patch: Partial<Rating>) {
     setRatings((current) => ({ ...current, [itemId]: { ...current[itemId], ...patch } }));
@@ -58,7 +60,10 @@ export default function InstrumentReviewPage() {
     event.preventDefault();
     if (!access) return;
     const items = access.snapshot.instrument_items || [];
-    if (items.some((item) => !ratings[item.item_id] || ["clarity", "relevance", "coverage"].some((key) => ratings[item.item_id][key as keyof Rating] < 1 || ratings[item.item_id][key as keyof Rating] > 4))) {
+    if (items.some((item) => {
+      const rating = ratings[item.item_id];
+      return !rating || [rating.clarity, rating.relevance, rating.coverage].some((value) => value < 1 || value > 4);
+    })) {
       setError("Please provide all three ratings for every question before submitting.");
       return;
     }
