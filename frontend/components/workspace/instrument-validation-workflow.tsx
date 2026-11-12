@@ -99,7 +99,7 @@ export default function InstrumentValidationWorkflow({
     return new Map(sections.map((section, index) => [
       String(section.section_id ?? ""),
       String(section.title ?? `Section ${index + 1}`),
-    ]));
+    ] as const));
   }, [selectedVersion?.version_id]);
 
   useEffect(() => {
