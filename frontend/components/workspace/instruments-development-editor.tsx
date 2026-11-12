@@ -226,9 +226,21 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
       setError("Enter an instrument title and its research purpose before saving.");
       return;
     }
+    const untitledSection = form.instrument_sections.find((section) => !section.title.trim());
+    if (untitledSection) {
+      setError("Give every section a title or remove the empty section before saving.");
+      return;
+    }
     const incomplete = form.instrument_items.find((item) => !item.prompt.trim());
     if (incomplete) {
       setError("Complete or remove every blank instrument item before saving.");
+      return;
+    }
+    const invalidSectionLink = form.instrument_items.find((item) =>
+      item.section_id && !form.instrument_sections.some((section) => section.section_id === item.section_id)
+    );
+    if (invalidSectionLink) {
+      setError("Assign each question to an existing section or leave it unassigned.");
       return;
     }
     const choiceItem = form.instrument_items.find((item) =>
