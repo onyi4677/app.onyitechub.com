@@ -120,7 +120,7 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
     const afterYear = yearMatch ? citation.slice(citation.indexOf(yearMatch[0]) + yearMatch[0].length).replace(/^\.\s*/, "") : citation;
     const title = (afterYear || citation).replace(/\.\s*$/, "").trim().slice(0, 1000);
     const authorText = yearMatch ? citation.slice(0, citation.indexOf(yearMatch[0])).replace(/[,.]\s*$/, "") : "";
-    const authors = authorText.split(/,\s*/).map((part) => part.trim()).filter(Boolean);
+    const authors = authorText.split(/,\s*(?=[A-Z][a-z-]+,)|,\s*&\s*/).map((part) => part.trim()).filter(Boolean);
     const doi = row.DOI || "";
     const urls = (row["Accessible article source"] || "").match(/https?:\/\/[^\s;]+/g) || [];
     return { title, year, authors, doi, url: urls[0] || "", citation };
