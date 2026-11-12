@@ -14,7 +14,7 @@ type InstrumentItem = {
   item_id: string;
   section_id: string;
   prompt: string;
-  response_type: "short_text" | "long_text" | "single_choice" | "multiple_choice" | "dropdown" | "number" | "date" | "likert_5";
+  response_type: "short_text" | "long_text" | "single_choice" | "multiple_choice" | "dropdown" | "number" | "date" | "likert_5" | "likert_6" | "likert_7";
   required: boolean;
   options: string[];
   help_text: string;
@@ -73,6 +73,8 @@ const responseTypes: Array<[InstrumentItem["response_type"], string]> = [
   ["number", "Number"],
   ["date", "Date"],
   ["likert_5", "5-point Likert response"],
+  ["likert_6", "6-point Likert response"],
+  ["likert_7", "7-point Likert response"],
 ];
 
 function normalizeSections(value: unknown): InstrumentSection[] {
@@ -344,7 +346,7 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
                 <textarea rows={4} value={item.options.join("\n")} onChange={(e) => updateItem(item.item_id, { options: e.target.value.split("\n").map((option) => option.trim()).filter(Boolean) })} placeholder={"Strongly disagree\nDisagree\nNeither agree nor disagree\nAgree\nStrongly agree"} />
               </label>
             )}
-            {item.response_type === "likert_5" && <p className="muted">The response scale is stored as a five-point Likert format. Define the exact anchors in the instrument instructions before validation.</p>}
+            {item.response_type.startsWith("likert_") && <p className="muted">The response scale is stored as a {item.response_type.slice(7)}-point Likert format. Enter the exact response anchors in the instrument instructions so the original scale is administered without changing its response structure.</p>}
             <label>Help text (optional)
               <input value={item.help_text} onChange={(e) => updateItem(item.item_id, { help_text: e.target.value })} placeholder="Clarify terms or the response period, if needed." />
             </label>
