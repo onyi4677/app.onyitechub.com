@@ -47,3 +47,22 @@ export async function getProjectResearchSources(id: string) {
     `/api/projects/${encodeURIComponent(id)}/research-sources`
   );
 }
+
+export type LiteratureSourceInput = {
+  authors: string[];
+  year: number | null;
+  title: string;
+  source_type: string;
+  journal_or_publisher?: string | null;
+  doi?: string | null;
+  url?: string | null;
+  abstract?: string | null;
+  verified?: boolean;
+};
+
+export async function createProjectLiteratureSource(id: string, source: LiteratureSourceInput) {
+  return apiRequest<{ status: string; source: CanonicalResearchSource }>(
+    `/api/projects/${encodeURIComponent(id)}/literature/sources`,
+    { method: "POST", body: JSON.stringify(source) }
+  );
+}
