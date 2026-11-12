@@ -93,6 +93,14 @@ export default function InstrumentValidationWorkflow({
     [versions, selectedVersionId],
   );
   const savedRecord = records.find((record) => record.version_id === selectedVersion?.version_id);
+  const sectionTitles = useMemo(() => {
+    const sections = Array.isArray(selectedVersion?.snapshot.instrument_sections)
+      ? selectedVersion.snapshot.instrument_sections as Array<Record<string, unknown>> : [];
+    return new Map(sections.map((section, index) => [
+      String(section.section_id ?? ""),
+      String(section.title ?? `Section ${index + 1}`),
+    ]));
+  }, [selectedVersion?.version_id]);
 
   useEffect(() => {
     if (!selectedVersionId && versions.length) setSelectedVersionId(versions[versions.length - 1].version_id);
@@ -238,6 +246,9 @@ export default function InstrumentValidationWorkflow({
                         const rating = review.item_ratings?.[itemId] ?? { clarity: 0, relevance: 0, coverage: 0, comments: "" };
                         return (
                           <div className="card editor-section" key={itemId}>
+                            {item.section_id && sectionTitles.has(String(item.section_id)) && (
+                              <p className="muted">{sectionTitles.get(String(item.section_id))}</p>
+                            )}
                             <strong>{itemIndex + 1}. {String(item.prompt ?? "Untitled item")}</strong>
                             {(["clarity", "relevance", "coverage"] as const).map((criterion) => (
                               <label key={criterion}>{criterion.charAt(0).toUpperCase() + criterion.slice(1)}
@@ -279,7 +290,8 @@ export default function InstrumentValidationWorkflow({
                     const ratings = draft.expert_reviews
                       .map((review) => review.item_ratings?.[itemId]?.relevance ?? 0)
                       .filter((rating) => rating > 0);
-                    return { itemId, prompt: String(item.prompt ?? "Untitled item"), ratings, cvi: ratings.length ? ratings.filter((rating) => rating >= 3).length / ratings.length : null };
+                    const sectionTitle = item.section_id ? sectionTitles.get(String(item.section_id)) : undefined;
+                    return { itemId, prompt: String(item.prompt ?? "Untitled item"), sectionTitle, ratings, cvi: ratings.length ? ratings.filter((rating) => rating >= 3).length / ratings.length : null };
                   });
                   const available = itemCvi.filter((item) => item.cvi !== null);
                   const scaleAverage = itemCvi.length > 0 && available.length === itemCvi.length
@@ -288,7 +300,7 @@ export default function InstrumentValidationWorkflow({
                     <div className="notice">
                       <strong>Content validity summary (4-point relevance ratings)</strong>
                       <p className="muted">I-CVI is the proportion of submitted relevance ratings of 3 or 4 for an item. S-CVI/Ave is the mean I-CVI across items with ratings. These are descriptive calculations; interpret them using a declared method and the number of reviewers, not as an automatic pass/fail.</p>
-                      {itemCvi.map((item) => <p key={item.itemId}>{item.prompt}: {item.cvi === null ? "Not yet rated" : item.cvi.toFixed(2) + " (I-CVI; n=" + item.ratings.length + ")"}</p>)}
+                      {itemCvi.map((item) => <p key={item.itemId}>{item.sectionTitle ? item.sectionTitle + " — " : ""}{item.prompt}: {item.cvi === null ? "Not yet rated" : item.cvi.toFixed(2) + " (I-CVI; n=" + item.ratings.length + ")"}</p>)}
                       <strong>S-CVI/Ave: {scaleAverage === null ? "Not yet available — every item needs at least one relevance rating" : scaleAverage.toFixed(2)}</strong>
                     </div>
                   );
