@@ -85,7 +85,7 @@ export async function readXlsx(file: File): Promise<WorkbookSheet[]> {
   const sheets: WorkbookSheet[] = [];
   for (const sheet of Array.from(workbook.getElementsByTagName("sheet"))) {
     const name = attr(sheet, "name");
-    const target = targets.get(attr(sheet, "id"));
+    const target = targets.get(sheet.getAttribute("r:id") || sheet.getAttribute("id") || "");
     if (!target) continue;
     const path = target.startsWith("/") ? target.slice(1) : "xl/" + target.replace(/^\.\//, "");
     const doc = xml(await read(path));
