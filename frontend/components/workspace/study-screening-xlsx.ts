@@ -24,6 +24,7 @@ async function unzipEntries(buffer: ArrayBuffer) {
   const count = view.getUint16(eocd + 10, true);
   let cursor = view.getUint32(eocd + 16, true);
   const entries = new Map<string, { method: number; size: number; compressedSize: number; offset: number }>();
+  let uncompressedTotal = 0;
   for (let i = 0; i < count; i++) {
     if (view.getUint32(cursor, true) !== 0x02014b50) throw new Error("The Excel archive directory is damaged.");
     const method = view.getUint16(cursor + 10, true);
@@ -34,6 +35,8 @@ async function unzipEntries(buffer: ArrayBuffer) {
     const commentLength = view.getUint16(cursor + 32, true);
     const offset = view.getUint32(cursor + 42, true);
     const name = decoder.decode(new Uint8Array(buffer, cursor + 46, nameLength));
+    uncompressedTotal += size;
+    if (uncompressedTotal > 50 * 1024 * 1024) throw new Error("The workbook expands beyond the 50 MB safety limit.");
     entries.set(name, { method, size, compressedSize, offset });
     cursor += 46 + nameLength + extraLength + commentLength;
   }
