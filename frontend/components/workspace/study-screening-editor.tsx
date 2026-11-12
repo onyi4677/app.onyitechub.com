@@ -45,7 +45,7 @@ function normalize(value: unknown): RecordItem | null {
     title_abstract_reason: r.title_abstract_reason || "", full_text_decision: r.full_text_decision || "not_assessed",
     full_text_reason: r.full_text_reason || "", retrieval_attempts: Array.isArray(r.retrieval_attempts) ? r.retrieval_attempts : [],
     notes: r.notes || "", decision_history: Array.isArray(r.decision_history) ? r.decision_history : [],
-    created_at: r.created_at || stamp(), updated_at: r.updated_at || r.created_at || stamp() };
+    created_at: r.created_at || stamp(), updated_at: r.updated_at || r.created_at || stamp(), imported_metadata: r.imported_metadata && typeof r.imported_metadata === "object" ? r.imported_metadata : undefined };
 }
 
 export default function StudyScreeningEditor({ projectId }: { projectId: string }) {
@@ -139,7 +139,7 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
       const doiKey = normalizeDoi(citation.doi);
       const titleKey = normalizeIdentity(citation.title);
       const found = known.find((source) => (doiKey && normalizeDoi(source.doi || "") === doiKey) ||
-        (!doiKey && titleKey && normalizeIdentity(source.title) === titleKey));
+        (titleKey && normalizeIdentity(source.title) === titleKey));
       if (found) return { id: found.canonical_source_id };
       const localKey = doiKey ? "doi:" + doiKey : "title:" + titleKey;
       if (createdSources.has(localKey)) return { id: createdSources.get(localKey) as string };
