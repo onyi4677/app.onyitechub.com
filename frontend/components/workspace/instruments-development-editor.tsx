@@ -317,6 +317,45 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
     setExistingData(saved);
   }
 
+
+  function renderItem(item: InstrumentItem, index: number) {
+    return (
+          <div className="card editor-section" key={item.item_id}>
+            <div className="editor-actions">
+              <strong>Question / item {index + 1}</strong>
+              <button className="button" type="button" onClick={() => update("instrument_items", form.instrument_items.filter((entry) => entry.item_id !== item.item_id))}>Remove item</button>
+            </div>
+            <label>Section
+              <select value={item.section_id} onChange={(event) => updateItem(item.item_id, { section_id: event.target.value })}>
+                <option value="">Unassigned / legacy item</option>
+                {form.instrument_sections.map((section) => <option key={section.section_id} value={section.section_id}>{section.title || "Untitled section"}</option>)}
+              </select>
+            </label>
+            <label>Question / extraction prompt
+              <textarea rows={3} value={item.prompt} onChange={(e) => updateItem(item.item_id, { prompt: e.target.value })} placeholder="Write one clear question or data-extraction field." />
+            </label>
+            <label>Response format
+              <select value={item.response_type} onChange={(e) => updateItem(item.item_id, { response_type: e.target.value as InstrumentItem["response_type"] })}>
+                {responseTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            {["single_choice", "multiple_choice", "dropdown"].includes(item.response_type) && (
+              <label>Response options (one per line; provide at least two)
+                <textarea rows={4} value={item.options.join("\n")} onChange={(e) => updateItem(item.item_id, { options: e.target.value.split("\n").map((option) => option.trim()).filter(Boolean) })} placeholder={"Strongly disagree\nDisagree\nNeither agree nor disagree\nAgree\nStrongly agree"} />
+              </label>
+            )}
+            {item.response_type === "likert_5" && <p className="muted">The response scale is stored as a five-point Likert format. Define the exact anchors in the instrument instructions before validation.</p>}
+            <label>Help text (optional)
+              <input value={item.help_text} onChange={(e) => updateItem(item.item_id, { help_text: e.target.value })} placeholder="Clarify terms or the response period, if needed." />
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={item.required} onChange={(e) => updateItem(item.item_id, { required: e.target.checked })} />
+              Response required
+            </label>
+          </div>
+    );
+  }
+
   if (loading) return <div className="card module-workspace"><p>Loading Instruments &amp; Data Collection...</p></div>;
 
   return (
@@ -416,50 +455,24 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
             <label>Section instructions or description (optional)
               <textarea rows={2} value={section.description} onChange={(event) => updateSection(section.section_id, { description: event.target.value })} placeholder="Explain the purpose or instructions for this section." />
             </label>
+            <div className="editor-actions">
+              <strong>Questions / items in this section</strong>
+              <button className="button" type="button" onClick={() => update("instrument_items", [...form.instrument_items, newItem(section.section_id)])}>Add question to this section</button>
+            </div>
+            {form.instrument_items.filter((item) => item.section_id === section.section_id).map((item) => renderItem(item, form.instrument_items.indexOf(item)))}
           </div>
         ))}
         <div className="editor-actions">
           <button className="button" type="button" onClick={() => update("instrument_sections", [...form.instrument_sections, newSection()])}>Add section</button>
         </div>
-        {form.instrument_items.length === 0 && <p className="muted">No questions or extraction items have been added yet.</p>}
-        {form.instrument_items.map((item, index) => (
-          <div className="card editor-section" key={item.item_id}>
-            <div className="editor-actions">
-              <strong>Question / item {index + 1}</strong>
-              <button className="button" type="button" onClick={() => update("instrument_items", form.instrument_items.filter((entry) => entry.item_id !== item.item_id))}>Remove item</button>
-            </div>
-            <label>Section
-              <select value={item.section_id} onChange={(event) => updateItem(item.item_id, { section_id: event.target.value })}>
-                <option value="">Unassigned / legacy item</option>
-                {form.instrument_sections.map((section) => <option key={section.section_id} value={section.section_id}>{section.title || "Untitled section"}</option>)}
-              </select>
-            </label>
-            <label>Question / extraction prompt
-              <textarea rows={3} value={item.prompt} onChange={(e) => updateItem(item.item_id, { prompt: e.target.value })} placeholder="Write one clear question or data-extraction field." />
-            </label>
-            <label>Response format
-              <select value={item.response_type} onChange={(e) => updateItem(item.item_id, { response_type: e.target.value as InstrumentItem["response_type"] })}>
-                {responseTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </label>
-            {["single_choice", "multiple_choice", "dropdown"].includes(item.response_type) && (
-              <label>Response options (one per line; provide at least two)
-                <textarea rows={4} value={item.options.join("\n")} onChange={(e) => updateItem(item.item_id, { options: e.target.value.split("\n").map((option) => option.trim()).filter(Boolean) })} placeholder={"Strongly disagree\nDisagree\nNeither agree nor disagree\nAgree\nStrongly agree"} />
-              </label>
-            )}
-            {item.response_type === "likert_5" && <p className="muted">The response scale is stored as a five-point Likert format. Define the exact anchors in the instrument instructions before validation.</p>}
-            <label>Help text (optional)
-              <input value={item.help_text} onChange={(e) => updateItem(item.item_id, { help_text: e.target.value })} placeholder="Clarify terms or the response period, if needed." />
-            </label>
-            <label className="checkbox-label">
-              <input type="checkbox" checked={item.required} onChange={(e) => updateItem(item.item_id, { required: e.target.checked })} />
-              Response required
-            </label>
+        {form.instrument_items.filter((item) => !item.section_id || !form.instrument_sections.some((section) => section.section_id === item.section_id)).length > 0 && (
+          <div className="card editor-section">
+            <strong>Unassigned / legacy questions</strong>
+            <p className="muted">Assign each existing question to a section, or remove it if it is no longer needed.</p>
+            {form.instrument_items.filter((item) => !item.section_id || !form.instrument_sections.some((section) => section.section_id === item.section_id)).map((item) => renderItem(item, form.instrument_items.indexOf(item)))}
           </div>
-        ))}
-        <div className="editor-actions">
-          <button className="button" type="button" disabled={form.instrument_sections.length === 0} onClick={() => update("instrument_items", [...form.instrument_items, newItem(form.instrument_sections[0].section_id)])}>Add question / item</button>
-        </div>
+        )}
+        {form.instrument_items.length === 0 && <p className="muted">No questions or extraction items have been added yet. Use the button inside each section to add its first question.</p>}
         <p className="muted">Each question is stored separately and linked to a section. Validation will assess individual questions while retaining their section context. Online respondent delivery remains a separate future milestone.</p>
       </div>
 
