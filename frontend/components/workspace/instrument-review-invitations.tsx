@@ -9,7 +9,7 @@ import {
 type ImportedReview = {
   reviewer_name: string; reviewer_role: string; expertise: string; review_date: string;
   comments: string; recommendation: string;
-  item_ratings: Record<string, { clarity: number; relevance: number; coverage: number; comments?: string }>;
+  item_ratings: Record<string, { clarity: number; relevance: number; coverage: number; comments: string }>;
 };
 
 export default function InstrumentReviewInvitations({
