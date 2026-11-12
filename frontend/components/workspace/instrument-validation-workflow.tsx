@@ -93,13 +93,17 @@ export default function InstrumentValidationWorkflow({
     [versions, selectedVersionId],
   );
   const savedRecord = records.find((record) => record.version_id === selectedVersion?.version_id);
-  const sectionTitles = useMemo(() => {
+  const sectionTitles = useMemo<Map<string, string>>(() => {
     const sections = Array.isArray(selectedVersion?.snapshot.instrument_sections)
-      ? selectedVersion.snapshot.instrument_sections as Array<Record<string, unknown>> : [];
-    return new Map(sections.map((section, index) => [
-      String(section.section_id ?? ""),
-      String(section.title ?? `Section ${index + 1}`),
-    ] as const));
+      ? selectedVersion.snapshot.instrument_sections as Array<Record<string, unknown>>
+      : [];
+
+    return new Map<string, string>(
+      sections.map((section, index): [string, string] => [
+        String(section.section_id ?? ""),
+        String(section.title ?? `Section ${index + 1}`),
+      ])
+    );
   }, [selectedVersion?.version_id]);
 
   useEffect(() => {
