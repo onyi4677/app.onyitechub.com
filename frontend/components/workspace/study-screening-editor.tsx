@@ -171,7 +171,7 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
       const alreadyLinked = nextRecords.some((record) => record.source_id === sourceId);
       if (alreadyLinked) { skipped++; continue; }
       const status = (row["Decision status"] || "").trim().toLowerCase();
-      const taDecision: TADecision = status.startsWith("exclude") ? "exclude" : status.includes("provisional") ? "maybe" : status.startsWith("include") ? "include" : "not_screened";
+      const taDecision: TADecision = status.includes("provisional") || status.startsWith("hold") ? "maybe" : status.startsWith("exclude") ? "exclude" : status.startsWith("include") ? "include" : "not_screened";
       const importedRecord: RecordItem = {
         screening_id: makeId(), source_id: sourceId, title_snapshot: citation.title || citation.citation,
         citation_snapshot: citation.citation, protocol_snapshot: [methodology.review_question, methodology.pcc_population, methodology.pcc_concept, methodology.pcc_context, methodology.eligibility_criteria].filter(Boolean).map(String).join("\n\n"),
