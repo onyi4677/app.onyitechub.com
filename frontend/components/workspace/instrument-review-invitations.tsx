@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import {
   createInstrumentReviewInvitation, listInstrumentReviewInvitations, revokeInstrumentReviewInvitation,
   type InstrumentReviewInvitation,
@@ -34,7 +35,7 @@ export default function InstrumentReviewInvitations({
 
   useEffect(() => { refresh().catch((err) => setError(err instanceof Error ? err.message : "Could not load invitations.")); }, [projectId, versionNumber]);
 
-  async function create(event: React.FormEvent) {
+  async function create(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(""); setMessage(""); setLink("");
     try {
       const result = await createInstrumentReviewInvitation(projectId, {
