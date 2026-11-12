@@ -96,5 +96,3 @@ class InstrumentVersionHistoryTests(unittest.TestCase):
         self.assertEqual(pathway["instrument_versions"], [self.version])
         self.assertEqual(pathway["validation_records"], [self.validation])
 
-
-if __(!1);
