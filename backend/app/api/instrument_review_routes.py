@@ -81,6 +81,9 @@ def create_instrument_review_invitation(
     version = next((entry for entry in versions if isinstance(entry, dict) and entry.get("version_id") == payload.version_id), None)
     if not version or not isinstance(version.get("snapshot"), dict):
         raise HTTPException(status_code=404, detail="The selected saved instrument version was not found.")
+    snapshot_items = version["snapshot"].get("instrument_items")
+    if not isinstance(snapshot_items, list) or not snapshot_items:
+        raise HTTPException(status_code=422, detail="Add at least one saved question or item before inviting an expert reviewer.")
 
     token = secrets.token_urlsafe(48)
     key = _token_key(token)
