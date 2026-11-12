@@ -75,15 +75,15 @@ function newValidation(version: InstrumentVersion, pathway: Pathway): Validation
   };
 }
 
-function reviewText(value) {
+function reviewText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function escapeHtml(value) {
+function escapeHtml(value: unknown): string {
   return reviewText(value).replace(/[&<>"']/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[character] || character);
 }
 
-function escapeRtf(value) {
+function escapeRtf(value: unknown): string {
   let output = "";
   for (const character of reviewText(value)) {
     if (character === "\\") output += "\\\\";
@@ -105,7 +105,7 @@ function escapeRtf(value) {
   return output;
 }
 
-function htmlItemsForOne(item, index) {
+function htmlItemsForOne(item: Record<string, unknown>, index: number): string {
   const options = Array.isArray(item.options) ? item.options.map(option => "<li>" + escapeHtml(option) + "</li>").join("") : "";
   return "<article class=\"item\"><h3>" + (index + 1) + ". " + escapeHtml(item.prompt) + "</h3>" +
     "<p><strong>Response format:</strong> " + escapeHtml(item.response_type) + (item.required === true ? " · Required" : "") + "</p>" +
@@ -116,7 +116,7 @@ function htmlItemsForOne(item, index) {
     "</tbody></table><p><strong>Item-specific comments / suggested revision:</strong></p><div class=\"writing-space\"></div></article>";
 }
 
-function buildReviewerDocument(version, pathway) {
+function buildReviewerDocument(version: InstrumentVersion, pathway: Pathway): { html: string; rtf: string } {
   const snapshot = version.snapshot;
   const sections = Array.isArray(snapshot.instrument_sections) ? snapshot.instrument_sections : [];
   const items = Array.isArray(snapshot.instrument_items) ? snapshot.instrument_items : [];
@@ -202,7 +202,7 @@ function buildReviewerDocument(version, pathway) {
   return {html,rtf};
 }
 
-function downloadReviewerWord(version, pathway) {
+function downloadReviewerWord(version: InstrumentVersion, pathway: Pathway): void {
   const doc = buildReviewerDocument(version,pathway);
   const blob = new Blob([doc.rtf],{type:"application/rtf;charset=utf-8"});
   const url = URL.createObjectURL(blob);
@@ -215,18 +215,18 @@ function downloadReviewerWord(version, pathway) {
   URL.revokeObjectURL(url);
 }
 
-function printReviewerPdf(version, pathway) {
+function printReviewerPdf(version: InstrumentVersion, pathway: Pathway): void {
   const doc = buildReviewerDocument(version,pathway);
   const printWindow = window.open("","_blank");
   if (!printWindow) {
     window.alert("Please allow pop-ups for this site, then select Print / Save PDF again.");
     return;
   }
+  printWindow.onload = () => printWindow.print();
   printWindow.document.open();
   printWindow.document.write(doc.html);
   printWindow.document.close();
   printWindow.focus();
-  printWindow.onload = () => printWindow.print();
 }
 
 export default function InstrumentValidationWorkflow({
