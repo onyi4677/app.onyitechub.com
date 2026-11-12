@@ -24,7 +24,7 @@ type ValidationRecord = {
   version_number: number;
   pathway: Pathway;
   created_at: string;
-  status: "review_pending" | "revisions_required" | "pilot_pending" | "validated";
+  status: "draft" | "review_pending" | "revisions_required" | "pilot_pending" | "validated";
   expert_reviews: ReviewEntry[];
   pilot_sample_size: string;
   pilot_method: string;
@@ -55,7 +55,7 @@ function newValidation(version: InstrumentVersion, pathway: Pathway): Validation
     version_number: version.version_number,
     pathway,
     created_at: new Date().toISOString(),
-    status: "review_pending",
+    status: "draft",
     expert_reviews: [],
     pilot_sample_size: "",
     pilot_method: "",
@@ -130,14 +130,20 @@ export default function InstrumentValidationWorkflow({
         review.reviewer_name.trim() && review.reviewer_role.trim() && review.expertise.trim() &&
         review.review_date && review.comments.trim() && review.recommendation
       );
+      const snapshotItems = Array.isArray(selectedVersion.snapshot.instrument_items)
+        ? selectedVersion.snapshot.instrument_items as Array<Record<string, unknown>> : [];
+      const hasItemRatings = snapshotItems.length > 0 && snapshotItems.every((item, index) => {
+        const itemId = typeof item.item_id === "string" ? item.item_id : "item-" + (index + 1);
+        return candidate.expert_reviews.some((review) => (review.item_ratings?.[itemId]?.relevance ?? 0) > 0);
+      });
       const hasPilotEvidence = Number(candidate.pilot_sample_size) > 0 && candidate.pilot_method.trim() && candidate.pilot_findings.trim();
       const hasMethodSpecificEvidence = pathway === "primary_data"
         ? (candidate.reliability_method.trim() && candidate.reliability_result.trim()) || candidate.reliability_notes.trim()
         : (candidate.second_reviewer.trim() && candidate.agreement_method.trim() && candidate.agreement_result.trim()) || candidate.disagreement_resolution.trim();
-      if (!hasExpertReview || !hasPilotEvidence || !hasMethodSpecificEvidence || !candidate.decision_rationale.trim() || !candidate.decision_date) {
+      if (!hasExpertReview || !hasItemRatings || !hasPilotEvidence || !hasMethodSpecificEvidence || !candidate.decision_rationale.trim() || !candidate.decision_date) {
         setError(pathway === "primary_data"
-          ? "Before recording a validated outcome, add an expert review, pilot sample size and findings, reliability evidence (or an explanation), and a dated decision rationale."
-          : "Before recording a validated outcome, add an expert review, pilot extraction sample and findings, reviewer-agreement evidence (or an explanation), and a dated decision rationale.");
+          ? "Before recording a validated outcome, add a complete expert review, relevance ratings for every item, pilot sample size and findings, reliability evidence (or an explanation), and a dated decision rationale."
+          : "Before recording a validated outcome, add a complete expert review, relevance ratings for every extraction field, a pilot extraction sample and findings, reviewer-agreement evidence (or an explanation), and a dated decision rationale.");
         return;
       }
     }
@@ -188,6 +194,7 @@ export default function InstrumentValidationWorkflow({
             <>
               <label>Validation status
                 <select value={draft.status} onChange={(event) => update("status", event.target.value as ValidationRecord["status"])}>
+                  <option value="draft">Draft</option>
                   <option value="review_pending">Review pending</option>
                   <option value="revisions_required">Revisions required</option>
                   <option value="pilot_pending">Pilot pending</option>
