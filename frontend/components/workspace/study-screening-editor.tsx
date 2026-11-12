@@ -291,7 +291,6 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
       </div>)}
       <button type="button" className="button secondary" onClick={addSearch}>+ Add search / import record</button>
     </section>
-    <section className="card editor-section">
     <StudyScreeningExcelImport onImport={importWorkbook} />
     {(data.evidence_extractions.length > 0 || data.source_verifications.length > 0 || data.import_batches.length > 0) && <section className="card editor-section">
       <div className="eyebrow">Imported workbook material</div><h3>Evidence extraction and source verification</h3>
@@ -317,6 +316,7 @@ export default function StudyScreeningEditor({ projectId }: { projectId: string 
         {Object.entries(record.imported_metadata || {}).map(([key, value]) => <p key={key}><strong>{key}:</strong> {value || "Not recorded"}</p>)}
       </details>)}
     </section>}
+    <section className="card editor-section">
       <div className="eyebrow">Reuse existing source records</div><h3>Add a record to screening</h3>
       {sources.length === 0 ? <p className="muted">No sources found. Add a work in References &amp; Citations or Literature &amp; Evidence first.</p> : <div className="form-grid">
         <label>Existing project source<select value={selected} onChange={(e) => setSelected(e.target.value)}>
