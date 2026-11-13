@@ -3,6 +3,7 @@ name: Deploy Backend to Isolated Staging
 on:
   push:
     branches:
+      - main
       - feat/citation-reference-verification
       - feature/project-topic-editing
       - feat/project-linked-instrument-builder
