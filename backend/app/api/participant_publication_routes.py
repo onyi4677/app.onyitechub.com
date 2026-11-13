@@ -74,7 +74,7 @@ def valid_answer(item: dict[str, Any], answer: Any) -> bool:
     if kind in {"single_choice", "dropdown"}:
         return isinstance(answer, str) and answer in options
     if kind == "multiple_choice":
-        return isinstance(answer, list) and len(answer) == len(set(answer)) and all(isinstance(x, str) and x in options for x in answer)
+        return isinstance(answer, list) and all(isinstance(x, str) and x in options for x in answer) and len(answer) == len(set(answer))
     if isinstance(kind, str) and kind.startswith("likert_"):
         try:
             scale, value = int(kind.split("_")[1]), int(answer)
