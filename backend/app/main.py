@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.api.integrity_routes import router as integrity_router
 from app.api.instrument_review_routes import router as instrument_review_router
+from app.api.participant_publication_routes import router as participant_publication_router
 from app.services.integrity_submissions import cleanup_expired_submissions
 from mangum import Mangum
 
@@ -44,6 +45,7 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(integrity_router)
 app.include_router(instrument_review_router)
+app.include_router(participant_publication_router)
 
 
 @app.get("/")

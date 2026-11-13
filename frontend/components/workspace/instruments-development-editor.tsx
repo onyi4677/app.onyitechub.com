@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getProjectModule, saveProjectModule } from "../../lib/api";
 import InstrumentValidationWorkflow from "./instrument-validation-workflow";
+import ParticipantPublicationWorkflow from "./participant-publication-workflow";
 
 type InstrumentSection = {
   section_id: string;
@@ -477,6 +478,15 @@ export default function InstrumentsDevelopmentEditor({ projectId }: { projectId:
         {form.instrument_items.length === 0 && <p className="muted">No questions or extraction items have been added yet. Use the button inside each section to add its first question.</p>}
         <p className="muted">Each question is stored separately and linked to a section. Validation will assess individual questions while retaining their section context. Online respondent delivery remains a separate future milestone.</p>
       </div>
+
+      {activePathway === "primary_data" && (
+        <ParticipantPublicationWorkflow
+          projectId={projectId}
+          versions={(existingData.pathways && typeof existingData.pathways === "object"
+            ? ((existingData.pathways as Record<string, unknown>).primary_data as Record<string, unknown> | undefined)?.instrument_versions
+            : undefined) as Array<{ version_id: string; version_number: number; snapshot: { instrument_title?: string; instrument_items?: unknown[] } }> ?? []}
+        />
+      )}
 
       <InstrumentValidationWorkflow
         projectId={projectId}
