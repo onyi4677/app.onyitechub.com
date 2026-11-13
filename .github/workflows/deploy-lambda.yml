@@ -1,12 +1,9 @@
 name: Deploy Backend to AWS Lambda
 
+# Production deployment is intentionally manual and requires separate
+# production-only GitHub Actions secrets. Staging credentials must never be
+# used to deploy the production Lambda.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "backend/**"
-      - ".github/workflows/deploy-lambda.yml"
   workflow_dispatch:
 
 permissions:
@@ -47,8 +44,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_PRODUCTION_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_PRODUCTION_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
       - name: Deploy to Lambda with retry
