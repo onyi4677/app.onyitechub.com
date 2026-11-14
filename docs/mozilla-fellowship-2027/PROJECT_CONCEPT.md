@@ -77,7 +77,7 @@ Five further modules are under development. The applicant intends to make all tw
 
 The Integrity and Review module combines deterministic Python-based checks with AI-assisted manuscript analysis using Amazon Bedrock Nova 2 Lite. The AI-assisted review is advisory; it does not establish plagiarism, misconduct or publication readiness.
 
-The applicant is willing, subject to a viable operating and sustainability plan, to make the Workspace available to researchers without subscription fees for public-benefit use. The applicant intends to retain ownership and control of the existing Workspace and its software. Free access to the proprietary Workspace is distinct from open-source licensing: the project will separately identify and release appropriate independent public outputs under suitable open licences.
+The applicant's stated ambition is to make the complete Workspace available without subscription fees to researchers across Africa, helping them develop research ideas and bring credible work to wider international academic audiences. This is a conditional intention: implementation depends on Fellowship selection, a viable operating and sustainability plan, and clarity about which costs can legitimately be supported. The applicant intends to retain ownership and control of the existing Workspace and its software. Free access to the proprietary Workspace is distinct from open-source licensing. Free access to the proprietary Workspace is distinct from open-source licensing: the project will separately identify and release appropriate independent public outputs under suitable open licences.
 
 The Workspace is an early-stage product. Existing tests and limited use should not be represented as evidence of broad adoption or established institutional partnerships. Fellowship funding should not simply subsidise proprietary product expansion. Any use of Fellowship resources in connection with the Workspace must be clearly justified, permitted by Mozilla's funding rules, and separated from ordinary company operating costs.
 
@@ -129,7 +129,7 @@ These are proposed starting principles, not a governance framework already endor
 
 The project aims to strengthen researcher participation in data governance and support more transparent, responsible use of research data and AI. Its framework, toolkit and technical outputs should benefit researchers and institutions beyond the applicant's company.
 
-The applicant's intention to provide free researcher access to Onyitech Research Workspace is a potential complementary public-benefit contribution. Its scope and duration will depend on a realistic plan for hosting, security, maintenance, support and ongoing development. The Fellowship stipend is personal support for the Fellow; the project budget is for approved project expenses and should not be assumed to cover all company operating costs.
+The applicant's intention, if selected for the Fellowship and able to establish a viable operating model, is to provide free access to Onyitech Research Workspace for researchers across Africa. The aim is to reduce barriers to developing research ideas and producing work that can reach wider academic audiences; access to tools cannot itself guarantee publication or international recognition. The applicant will retain ownership and control of the proprietary platform. The scope and duration of free access will depend on a realistic plan for hosting, security, maintenance, support and ongoing development. The Fellowship stipend is personal support for the Fellow; the project budget is for approved project expenses and should not be assumed to cover all company operating costs.
 
 Success will be assessed not only by outputs delivered, but also by the quality of participation, usefulness of the resources, independent use or adaptation, and evidence that stakeholder feedback changed the project's design.
 
@@ -141,7 +141,7 @@ Success will be assessed not only by outputs delivered, but also by the quality 
 - Identify prospective consultation participants and obtain their agreement before naming them as partners.
 - Determine appropriate open-source and documentation licences.
 - Establish an ethical engagement, privacy and safeguarding plan.
-- Define the scope, eligibility and sustainability model for free Workspace access.
+- Define the scope, eligibility and sustainability model for free Workspace access for researchers across Africa, conditional on Fellowship selection and viable operating arrangements.
 - Clarify which costs are legitimate project expenses and which are ordinary company operating costs.
 - Define milestones, evaluation measures and a sustainability plan.
 
