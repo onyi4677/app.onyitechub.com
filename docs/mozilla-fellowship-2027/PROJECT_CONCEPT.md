@@ -11,21 +11,26 @@
 
 ## 1. Project vision
 
-Develop an open, adaptable and community-governed framework that helps African research communities use AI responsibly while retaining meaningful control over research data, intellectual contributions and research decisions.
+Develop a community-governed approach to responsible research data use and AI in African research, beginning with consultation and testing in Nigeria and designed for adaptation across Africa.
 
-The project will explore how practical technical tools, transparent AI practices and participatory data-governance methods can work together. Its public outputs should be independently useful to researchers and institutions beyond Onyitech JournalHub.
+The project will bring researchers, research institutions and technology providers together to examine how research information is collected, stored, accessed, processed, shared and reused. It will produce a collaboratively developed governance framework, practical implementation resources and a technical prototype or other reusable technical outputs.
+
+A central principle is that researchers should have a meaningful role in shaping the rules governing their research materials and contributions. Governance must also respect the rights, privacy and interests of research participants and affected communities.
 
 ## 2. The problem
 
-African postgraduate researchers, early-career academics and research institutions often navigate research development through disconnected tools and services. At the same time, the growing use of AI raises important questions:
+Researchers' manuscripts, datasets, instruments, unpublished findings and intellectual contributions can be stored, processed, shared or reused under rules they had little role in shaping. Research participants' personal and sensitive information raises additional questions about consent, privacy, access, retention and future use.
+
+The growing use of AI in research adds further concerns:
 
 - What research information is collected, stored, transmitted or processed by AI tools?
 - Who can access and reuse research data and intellectual contributions?
-- How can researchers understand AI outputs, limitations and uncertainty?
-- What decisions must remain under human control?
-- How can research participants and affected communities influence the governance of sensitive data?
+- Are researchers able to understand and influence how their materials are used?
+- What permissions and safeguards should apply to AI processing and secondary data use?
+- What responsibilities should researchers, institutions and technology providers have?
+- How can research participants' rights and interests be protected?
 
-The project will investigate these questions with researchers and relevant community stakeholders rather than assume that one technical design fits every setting.
+The project will investigate these questions collaboratively rather than assume that one technical design or policy fits every setting.
 
 ## 3. Communities and intended participants
 
@@ -33,27 +38,28 @@ The project will investigate these questions with researchers and relevant commu
 
 - African postgraduate researchers.
 - Early-career academics.
-- African research institutions.
+- Research institutions and research support communities.
 
-### Additional governance participants
+### Other governance stakeholders
 
+- Technology providers supporting research data storage, processing and AI services.
 - Research participants whose personal or sensitive information may be processed.
 - Community organisations representing affected populations.
 
-These are intended communities, not confirmed partners or enrolled participants. The project will seek voluntary participation and meaningful input into problem definition, design, testing and governance.
+These are intended communities and stakeholder groups, not confirmed partners or enrolled participants. The project will seek voluntary participation and meaningful input into problem definition, design, testing and governance.
 
 ## 4. Proposed approach and activities
 
-1. **Community consultation:** Understand researchers' workflows, constraints, AI practices and data-governance concerns.
-2. **Co-design:** Work with participating researchers and relevant community representatives to identify practical principles, safeguards and priority needs.
-3. **Open technical development:** Build or adapt selected reusable components that support transparency, human oversight and responsible research workflows.
-4. **Governance resources:** Produce practical guidance and adaptable templates for research data governance, AI transparency, consent and accountability.
-5. **Testing and iteration:** Evaluate proposed tools and resources with participating communities and document changes made in response to their feedback.
-6. **Knowledge sharing:** Publish reusable documentation, educational materials and lessons for other African research communities.
+1. **Multi-stakeholder brainstorming:** Bring researchers, institutions and technology providers together to identify data-governance problems, competing interests and practical constraints before drafting rules.
+2. **Co-design:** Facilitate researchers' meaningful participation in developing governance principles, with appropriate attention to research participants' rights and interests.
+3. **Framework development:** Produce a common, adaptable research data governance framework for African research communities, initially informed by work in Nigeria.
+4. **Practical toolkit:** Develop usable policies, checklists, consent and data-reuse guidance, AI-use disclosure guidance, access procedures and accountability resources.
+5. **Technical development and testing:** Define and build or adapt a focused, reusable technical prototype that helps put selected governance principles into practice.
+6. **Evaluation and knowledge sharing:** Test resources with voluntary participants, document changes made in response to feedback, and publish lessons and reusable outputs.
 
 The precise scope and deliverables will be agreed after consultation and a feasibility assessment.
 
-## 5. Existing technical foundation
+## 5. Existing technical foundation and public-access intention
 
 Onyitech Research Workspace, developed by Onyitech JournalHub Ltd, provides an existing technical foundation and demonstrates the applicant's experience building and deploying research technology.
 
@@ -67,26 +73,31 @@ As of November 2026, seven of its twelve planned modules are operational:
 6. Instrument and Data Collection.
 7. Integrity and Review.
 
+Five further modules are under development. The applicant intends to make all twelve modules operational before January 2027. This is a development target, not a claim that all modules are already complete.
+
 The Integrity and Review module combines deterministic Python-based checks with AI-assisted manuscript analysis using Amazon Bedrock Nova 2 Lite. The AI-assisted review is advisory; it does not establish plagiarism, misconduct or publication readiness.
 
-The platform is an early-stage product. Its existing users and tests should not be represented as evidence of broad adoption or established institutional partnerships.
+The applicant is willing, subject to a viable operating and sustainability plan, to make the Workspace available to researchers without subscription fees for public-benefit use. The applicant intends to retain ownership and control of the existing Workspace and its software. Free access to the proprietary Workspace is distinct from open-source licensing: the project will separately identify and release appropriate independent public outputs under suitable open licences.
 
-The Fellowship project would draw on the applicant's technical experience while producing public-interest outputs that can be used independently of the commercial platform. Fellowship funding should not simply subsidise proprietary product expansion.
+The Workspace is an early-stage product. Existing tests and limited use should not be represented as evidence of broad adoption or established institutional partnerships. Fellowship funding should not simply subsidise proprietary product expansion. Any use of Fellowship resources in connection with the Workspace must be clearly justified, permitted by Mozilla's funding rules, and separated from ordinary company operating costs.
 
-## 6. Proposed open outputs
+## 6. Proposed public outputs
 
 Potential public outputs include:
 
-- Selected open-source software components under appropriate licences.
-- Technical documentation and implementation guides.
-- Responsible AI guidance for research workflows.
-- Research data-governance frameworks and practical templates.
+- A collaboratively developed, adaptable research data governance framework.
+- Practical policy templates, checklists and implementation guidance.
+- Guidance on consent, data access, sharing, retention and reuse.
+- Guidance for transparent and accountable AI use in research.
+- A focused open-source technical prototype or selected reusable software components, independently usable without purchasing Onyitech services.
 - Educational resources for postgraduate researchers and early-career academics.
-- Public reports documenting community consultation, design decisions, evaluation and lessons.
+- Public reports documenting consultation, design decisions, evaluation and lessons.
 
-Sensitive participant data, confidential manuscripts, personal information and other restricted research materials will not be published. Open development will be designed around privacy, consent, security and applicable ethical requirements.
+The exact software scope and licences will be selected after consultation and technical feasibility review. Sensitive participant data, confidential manuscripts, personal information and other restricted research materials will not be published. Open development will be designed around privacy, consent, security and applicable ethical requirements.
 
-## 7. Initial community engagement routes
+## 7. Initial geographic and community engagement approach
+
+Nigeria will be the initial setting for consultation and testing. The framework and public resources will be designed for adaptation by research communities elsewhere in Africa, without claiming continent-wide representation from a Nigeria-based pilot.
 
 Potential initial consultation routes include academic contacts and postgraduate research communities accessible through the applicant's professional network. These routes are exploratory only; no individual, university, student group or organisation is presented as a confirmed partner at this stage.
 
@@ -97,35 +108,41 @@ The engagement plan will:
 - Make clear that participation will not affect academic assessment, supervision or access to services.
 - Obtain institutional and research ethics approvals where required before formal research or collection of personal or sensitive information.
 - Include appropriate consent, privacy, safeguarding and data-retention arrangements.
+- Ensure researchers have meaningful influence over the rules and design, rather than treating consultation as endorsement of decisions already made.
 
 ## 8. Governance principles to explore
 
-The project will work with participating communities to define practical governance arrangements. Initial principles for discussion include:
+The project will work with participating stakeholders to define practical governance arrangements. Initial principles for discussion include:
 
+- **Researcher participation:** Researchers have a meaningful role in shaping rules for the storage, access, processing, sharing and reuse of their research materials and contributions.
 - **Transparency:** Explain what data is collected and how AI systems use it.
-- **Agency:** Give researchers meaningful choices and control over their contributions.
 - **Privacy and security:** Protect personal, confidential and sensitive research information.
+- **Participant rights:** Respect consent, privacy, applicable ethical requirements and the interests of people whose information is collected.
 - **Human oversight:** Keep consequential research decisions with accountable people.
-- **Participation:** Involve affected researchers and communities in design and governance.
-- **Reusability:** Make agreed public resources adaptable and independently usable.
-- **Accountability:** Document limitations, risks, decisions and mechanisms for feedback.
+- **Shared responsibility:** Clarify the roles of researchers, institutions and technology providers.
+- **Accountability:** Document permissions, limitations, risks, decisions and mechanisms for feedback.
+- **Adaptability:** Make public resources usable across different institutional and national contexts.
 
 These are proposed starting principles, not a governance framework already endorsed by participating communities.
 
-## 9. Intended public benefit
+## 9. Intended public benefit and sustainability
 
-The project aims to strengthen African research capacity and support more transparent, responsible and accessible use of AI in research. By releasing reusable tools, documentation and governance resources, it seeks to benefit researchers and institutions beyond the applicant's company.
+The project aims to strengthen researcher participation in data governance and support more transparent, responsible use of research data and AI. Its framework, toolkit and technical outputs should benefit researchers and institutions beyond the applicant's company.
 
-Success will be assessed not only by software delivered, but also by the quality of community participation, usefulness of the open outputs, adoption or adaptation by independent users, and evidence that community feedback changed the project's design.
+The applicant's intention to provide free researcher access to Onyitech Research Workspace is a potential complementary public-benefit contribution. Its scope and duration will depend on a realistic plan for hosting, security, maintenance, support and ongoing development. The Fellowship stipend is personal support for the Fellow; the project budget is for approved project expenses and should not be assumed to cover all company operating costs.
+
+Success will be assessed not only by outputs delivered, but also by the quality of participation, usefulness of the resources, independent use or adaptation, and evidence that stakeholder feedback changed the project's design.
 
 ## 10. Questions to resolve before the LOI
 
 - Confirm the Fellowship's eligibility and funding requirements for an applicant based in Nigeria.
 - Confirm the relevant Fellowship focus area and how the project fits its stated priorities.
-- Define a focused, feasible set of technical and community-governance deliverables for the Fellowship period.
+- Define a focused, feasible technical prototype and public deliverables for the Fellowship period.
 - Identify prospective consultation participants and obtain their agreement before naming them as partners.
 - Determine appropriate open-source and documentation licences.
 - Establish an ethical engagement, privacy and safeguarding plan.
+- Define the scope, eligibility and sustainability model for free Workspace access.
+- Clarify which costs are legitimate project expenses and which are ordinary company operating costs.
 - Define milestones, evaluation measures and a sustainability plan.
 
 ---
