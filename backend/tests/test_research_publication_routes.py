@@ -81,6 +81,22 @@ class ResearchPublicationRouteTests(unittest.TestCase):
         self.assertEqual(stored["consent_hash"], hashlib.sha256("\n".join([self.info.strip(), self.consent.strip(), "I confirm I am aged 18–35 and live in Anambra State.", "I may withdraw as described in the participant information sheet."]).encode()).hexdigest())
         self.assertEqual(stored["approval_reference"], "REC/2026/001")
 
+
+    @patch("app.api.research_publication_routes.projects_table.put_item")
+    @patch("app.api.research_publication_routes.projects_table.get_item")
+    def test_create_research_publication_allows_blank_pending_approval_fields(self, get_item, put_item):
+        get_item.return_value = {"Item": project()}
+        payload = self.publish_payload()
+        payload.ethics_committee = None
+        payload.approval_reference = None
+        payload.approval_date = None
+        result = create_research_publication("project-1", payload, user=self.user)
+        stored = put_item.call_args.kwargs["Item"]
+        self.assertEqual(result["mode"], "research")
+        self.assertEqual(stored["ethics_committee"], "")
+        self.assertEqual(stored["approval_reference"], "")
+        self.assertEqual(stored["approval_date"], "")
+
     @patch("app.api.research_publication_routes.projects_table.get_item")
     def test_public_endpoint_returns_participant_documents_and_versioned_consent(self, get_item):
         publication = {
