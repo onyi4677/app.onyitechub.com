@@ -53,6 +53,22 @@ class ResearchPublicationRouteTests(unittest.TestCase):
         self.info = "This participant information sheet describes the study, procedures, risks, benefits and confidentiality arrangements. " * 2
         self.consent = "I have read the information and voluntarily agree to participate in this study."
 
+    def test_publish_request_normalizes_blank_approval_fields(self):
+        payload = ResearchPublishRequest(
+            version_id="version-4",
+            ethics_committee="",
+            approval_reference="   ",
+            approval_date="",
+            participant_information=self.info,
+            consent_text=self.consent,
+            eligibility_text="I confirm I am aged 18–35 and live in Anambra State.",
+            withdrawal_text="I may withdraw as described in the participant information sheet.",
+            consent_version="1.0",
+        )
+        self.assertIsNone(payload.ethics_committee)
+        self.assertIsNone(payload.approval_reference)
+        self.assertIsNone(payload.approval_date)
+
     def publish_payload(self):
         return ResearchPublishRequest(
             version_id="version-4",
