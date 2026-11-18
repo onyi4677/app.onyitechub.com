@@ -1,6 +1,7 @@
 import csv
 import hashlib
 import io
+import logging
 import secrets
 from datetime import date, datetime, timezone
 from typing import Any
@@ -17,6 +18,7 @@ from app.db import projects_table
 from app.api.participant_publication_routes import publication_key, scan_all, valid_answer
 
 router = APIRouter(prefix="/api")
+logger = logging.getLogger(__name__)
 
 
 def now() -> str:
@@ -281,9 +283,24 @@ def close_research_publication(project_id: str, publication_id: str, user: dict[
             ExpressionAttributeValues={":closed": "research_closed", ":open": "research_open", ":mode": "research", ":owner": user["sub"], ":now": now()},
         )
     except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+        error = exc.response.get("Error", {})
+        error_code = error.get("Code", "Unknown")
+        logger.exception(
+            "Research collection close failed: project_id=%s publication_id=%s dynamodb_error_code=%s",
+            project_id,
+            publication_id,
+            error_code,
+        )
+        if error_code == "ConditionalCheckFailedException":
             raise HTTPException(status_code=409, detail="This research collection link is already closed.") from exc
         raise HTTPException(status_code=500, detail="Unable to close the research collection link.") from exc
+    except Exception:
+        logger.exception(
+            "Research collection close failed unexpectedly: project_id=%s publication_id=%s",
+            project_id,
+            publication_id,
+        )
+        raise HTTPException(status_code=500, detail="Unable to close the research collection link.")
     return {"status": "research_closed"}
 
 
