@@ -36,9 +36,9 @@ export default function ResearchPublicationWorkflow({ projectId, versions }: { p
     try {
       const result = await createResearchPublication(projectId, {
         version_id: selected,
-        ethics_committee: ethicsCommittee,
-        approval_reference: approvalReference,
-        approval_date: approvalDate,
+        ethics_committee: ethicsCommittee.trim() || null,
+        approval_reference: approvalReference.trim() || null,
+        approval_date: approvalDate || null,
         participant_information: information,
         consent_text: consent,
         eligibility_text: eligibility,
