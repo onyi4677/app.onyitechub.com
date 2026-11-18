@@ -78,7 +78,7 @@ class ResearchPublicationRouteTests(unittest.TestCase):
         self.assertFalse(stored["is_test"])
         self.assertEqual(stored["version_id"], "version-4")
         self.assertEqual(stored["snapshot"], project()["modules"]["instruments"]["pathways"]["primary_data"]["instrument_versions"][0]["snapshot"])
-        self.assertEqual(stored["consent_hash"], hashlib.sha256((self.info.strip() + "\n" + self.consent.strip()).encode()).hexdigest())
+        self.assertEqual(stored["consent_hash"], hashlib.sha256("\n".join([self.info.strip(), self.consent.strip(), "I confirm I am aged 18–35 and live in Anambra State.", "I may withdraw as described in the participant information sheet."]).encode()).hexdigest())
         self.assertEqual(stored["approval_reference"], "REC/2026/001")
 
     @patch("app.api.research_publication_routes.projects_table.get_item")
