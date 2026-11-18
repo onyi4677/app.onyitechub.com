@@ -6,6 +6,7 @@ on:
       - feat/study-screening-clean-main
       - feat/research-integrity-standalone-mvp
       - feat/citation-reference-verification
+      - feat/research-data-collection
     paths:
       - "backend/**"
       - ".github/workflows/backend-tests.yml"
