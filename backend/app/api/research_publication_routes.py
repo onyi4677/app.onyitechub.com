@@ -55,6 +55,7 @@ class ResearchSubmitRequest(BaseModel):
     consent: bool
     consent_version: str = Field(min_length=1, max_length=100)
     consent_hash: str = Field(min_length=64, max_length=64)
+    consented_at: datetime
     eligible: bool
     answers: dict[str, Any]
     elapsed_seconds: int = Field(ge=0, le=86400)
@@ -161,6 +162,11 @@ def submit_research_publication(payload: ResearchSubmitRequest):
         raise HTTPException(status_code=400, detail="You do not meet the study eligibility criteria.")
     if payload.elapsed_seconds < 8:
         raise HTTPException(status_code=400, detail="Please review the questionnaire before submitting.")
+    if payload.consented_at.tzinfo is None or payload.consented_at.utcoffset() is None:
+        raise HTTPException(status_code=422, detail="Consent timestamp must include a timezone.")
+    consent_timestamp = payload.consented_at.astimezone(timezone.utc)
+    if consent_timestamp > datetime.now(timezone.utc):
+        raise HTTPException(status_code=422, detail="Consent timestamp cannot be in the future.")
     try:
         publication = projects_table.get_item(Key={"id": publication_key(payload.token)}).get("Item")
     except ClientError as exc:
@@ -169,6 +175,12 @@ def submit_research_publication(payload: ResearchSubmitRequest):
         raise HTTPException(status_code=404, detail="This research questionnaire is closed or unavailable.")
     if payload.consent_version != publication.get("consent_version") or payload.consent_hash != publication.get("consent_hash"):
         raise HTTPException(status_code=409, detail="The participant information or consent text has changed. Reload the page and review it again.")
+    try:
+        publication_created = datetime.fromisoformat(str(publication.get("created_at", "")).replace("Z", "+00:00"))
+    except ValueError:
+        publication_created = None
+    if publication_created and consent_timestamp < publication_created:
+        raise HTTPException(status_code=422, detail="Consent must be recorded after the study link was created.")
     items = (publication.get("snapshot") or {}).get("instrument_items", [])
     expected = {item.get("item_id") for item in items if isinstance(item, dict)}
     if not set(payload.answers).issubset(expected):
@@ -210,7 +222,7 @@ def submit_research_publication(payload: ResearchSubmitRequest):
             "consent": True,
             "consent_version": publication["consent_version"],
             "consent_hash": publication["consent_hash"],
-            "consented_at": timestamp,
+            "consented_at": consent_timestamp.isoformat(),
             "submitted_at": timestamp,
         }, ConditionExpression="attribute_not_exists(id)")
     except ClientError as exc:
