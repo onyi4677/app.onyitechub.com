@@ -125,6 +125,8 @@ class ResearchPublicationRouteTests(unittest.TestCase):
         self.assertEqual(result, {"status": "research_closed"})
         self.assertEqual(update_item.call_args.kwargs["Key"], {"id": "publication-key"})
         self.assertIn("research_closed", update_item.call_args.kwargs["ExpressionAttributeValues"].values())
+        self.assertIn("#mode = :mode", update_item.call_args.kwargs["ConditionExpression"])
+        self.assertEqual(update_item.call_args.kwargs["ExpressionAttributeNames"]["#mode"], "mode")
 
     @patch("app.api.research_publication_routes.projects_table.update_item")
     @patch("app.api.research_publication_routes.scan_all")
