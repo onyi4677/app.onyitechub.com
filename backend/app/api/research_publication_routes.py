@@ -278,8 +278,8 @@ def close_research_publication(project_id: str, publication_id: str, user: dict[
         projects_table.update_item(
             Key={"id": found[0]["id"]},
             UpdateExpression="SET #s = :closed, closed_at = :now",
-            ConditionExpression="#s = :open AND mode = :mode AND owner_sub = :owner",
-            ExpressionAttributeNames={"#s": "status"},
+            ConditionExpression="#s = :open AND #mode = :mode AND owner_sub = :owner",
+            ExpressionAttributeNames={"#s": "status", "#mode": "mode"},
             ExpressionAttributeValues={":closed": "research_closed", ":open": "research_open", ":mode": "research", ":owner": user["sub"], ":now": now()},
         )
     except ClientError as exc:
