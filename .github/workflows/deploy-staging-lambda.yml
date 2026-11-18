@@ -7,6 +7,7 @@ on:
       - feat/citation-reference-verification
       - feature/project-topic-editing
       - feat/project-linked-instrument-builder
+      - feat/research-data-collection
     paths:
       - "backend/**"
       - ".github/workflows/deploy-staging-lambda.yml"
