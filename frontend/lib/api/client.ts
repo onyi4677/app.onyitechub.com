@@ -17,7 +17,16 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
     let detail = "Request failed.";
     try {
       const body = await response.json();
-      detail = body.detail || detail;
+      if (Array.isArray(body.detail)) {
+        detail = body.detail.map((item: { loc?: unknown[]; msg?: string }) => {
+          const field = Array.isArray(item.loc) ? item.loc.slice(1).join(".") : "";
+          return [field, item.msg || "Invalid value"].filter(Boolean).join(": ");
+        }).join("; ") || detail;
+      } else if (typeof body.detail === "string") {
+        detail = body.detail;
+      } else if (body.detail != null) {
+        detail = JSON.stringify(body.detail);
+      }
     } catch {}
     if (response.status === 401 && typeof window !== "undefined") {
       window.location.assign("/login");

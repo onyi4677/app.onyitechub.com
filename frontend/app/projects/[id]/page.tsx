@@ -98,6 +98,7 @@ export default function ProjectPage() {
         </div>
         <div className="actions">
           <button className="button" type="button" onClick={beginEditing}>Edit project details</button>
+          <Link className="button" href={`/projects/${project.id}/modules/instruments`}>Participant data collection</Link>
           <Link className="button primary" href={`/analyze?project=${project.id}`}>Run analysis</Link>
         </div>
       </div>
