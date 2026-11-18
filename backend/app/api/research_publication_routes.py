@@ -84,7 +84,7 @@ def create_research_publication(
         raise HTTPException(status_code=422, detail="The saved instrument has an invalid question structure.")
     info = payload.participant_information.strip()
     consent = payload.consent_text.strip()
-    consent_hash = digest(info + "\n" + consent)
+    consent_hash = digest("\n".join([info, consent, payload.eligibility_text.strip(), payload.withdrawal_text.strip()]))
     token = secrets.token_urlsafe(48)
     publication_id = str(uuid4())
     record = {
