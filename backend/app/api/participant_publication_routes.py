@@ -207,8 +207,8 @@ def submit_publication(payload: SubmitRequest):
 @router.get("/projects/{project_id}/participant-publications")
 def list_publications(project_id: str, user: dict[str, Any] = Depends(require_user)):
     owned_project(project_id, user)
-    publications = scan_all(Attr("entity_type").eq("participant_publication") & Attr("project_id").eq(project_id) & Attr("owner_sub").eq(user["sub"]))
-    responses = scan_all(Attr("entity_type").eq("participant_response") & Attr("project_id").eq(project_id) & Attr("owner_sub").eq(user["sub"]))
+    publications = scan_all(Attr("entity_type").eq("participant_publication") & Attr("mode").eq("technical_pilot") & Attr("project_id").eq(project_id) & Attr("owner_sub").eq(user["sub"]))
+    responses = scan_all(Attr("entity_type").eq("participant_response") & Attr("mode").eq("technical_pilot") & Attr("project_id").eq(project_id) & Attr("owner_sub").eq(user["sub"]))
     grouped: dict[str, list[dict[str, Any]]] = {}
     for response in responses:
         grouped.setdefault(response.get("publication_id", ""), []).append(response)
