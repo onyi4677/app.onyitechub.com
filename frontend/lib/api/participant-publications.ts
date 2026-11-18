@@ -83,9 +83,9 @@ export type ResearchPublication = {
   mode: "research";
   is_test: false;
   created_at: string;
-  ethics_committee: string;
-  approval_reference: string;
-  approval_date: string;
+  ethics_committee?: string;
+  approval_reference?: string;
+  approval_date?: string;
   consent_version: string;
   response_count: number;
 };
