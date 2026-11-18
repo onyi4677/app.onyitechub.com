@@ -277,8 +277,15 @@ def export_research_publication(project_id: str, publication_id: str, user: dict
     responses = scan_all(Attr("entity_type").eq("participant_research_response") & Attr("project_id").eq(project_id) & Attr("publication_id").eq(publication_id) & Attr("owner_sub").eq(user["sub"]))
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["response_id", "submitted_at", "consented_at", "consent_version", "version_number", "elapsed_seconds", "question_count", "answers_json"])
+    question_ids = [
+        item.get("item_id")
+        for item in (found[0].get("snapshot") or {}).get("instrument_items", [])
+        if isinstance(item, dict) and isinstance(item.get("item_id"), str)
+    ]
+    columns = ["response_id", "submitted_at", "consented_at", "consent_version", "instrument_version", "elapsed_seconds", "question_count", *question_ids]
+    writer.writerow(columns)
     for response in sorted(responses, key=lambda item: item.get("submitted_at", "")):
+        answers = response.get("answers", {}) if isinstance(response.get("answers"), dict) else {}
         writer.writerow([
             response.get("id", "").replace("participant-research-response#", ""),
             response.get("submitted_at", ""),
@@ -287,7 +294,11 @@ def export_research_publication(project_id: str, publication_id: str, user: dict
             response.get("version_number", ""),
             response.get("elapsed_seconds", ""),
             response.get("question_count", ""),
-            __import__("json").dumps(response.get("answers", {}), ensure_ascii=False, separators=(",", ":")),
+            *[
+                "; ".join(str(value) for value in answer) if isinstance((answer := answers.get(question_id)), list)
+                else answer if answer is not None else ""
+                for question_id in question_ids
+            ],
         ])
     content = "\ufeff" + output.getvalue()
     return StreamingResponse(iter([content]), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="research-responses-{publication_id}.csv"'})
