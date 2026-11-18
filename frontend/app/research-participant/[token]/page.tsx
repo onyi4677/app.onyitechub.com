@@ -17,7 +17,7 @@ export default function ParticipantPage() {
   const { token } = useParams<{token:string}>();
   const [form, setForm] = useState<FormData | null>(null); const [error, setError] = useState("");
   const [consent, setConsent] = useState(false); const [eligible, setEligible] = useState(false);
-  const [started, setStarted] = useState(false); const [startTime, setStartTime] = useState(0);
+  const [started, setStarted] = useState(false); const [startTime, setStartTime] = useState(0); const [consentedAt, setConsentedAt] = useState("");
   const [answers, setAnswers] = useState<Record<string, unknown>>({}); const [trap, setTrap] = useState("");
   const [busy, setBusy] = useState(false); const [done, setDone] = useState(false);
   useEffect(() => { let active=true; getPublicResearchQuestionnaire(token).then(v=>{if(active)setForm(v)}).catch(e=>{if(active)setError(e.message)}); return ()=>{active=false}; }, [token]);
@@ -40,7 +40,7 @@ export default function ParticipantPage() {
     const missing=items.find(i=>i.required&&(answers[i.item_id]===undefined||answers[i.item_id]===""||(Array.isArray(answers[i.item_id])&&!(answers[i.item_id] as unknown[]).length)));
     if(missing){setError("Please answer all required questions. Check: "+missing.prompt);return;}
     setBusy(true);setError("");
-    try { await submitPublicResearchQuestionnaire({token,browser_token:browserId(form!.publication_id),consent,consent_version:form!.consent_version,consent_hash:form!.consent_hash,eligible,answers,elapsed_seconds:Math.floor((Date.now()-startTime)/1000),website:trap});setDone(true); }
+    try { await submitPublicResearchQuestionnaire({token,browser_token:browserId(form!.publication_id),consent,consent_version:form!.consent_version,consent_hash:form!.consent_hash,consented_at:consentedAt,eligible,answers,elapsed_seconds:Math.floor((Date.now()-startTime)/1000),website:trap});setDone(true); }
     catch(e){setError(e instanceof Error?e.message:"Unable to save response.");} finally{setBusy(false);}
   }
   if(error&&!form)return <main className="module-editor"><div className="card editor-section"><h2>Research questionnaire unavailable</h2><p>{error}</p></div></main>;
@@ -49,7 +49,7 @@ export default function ParticipantPage() {
   return <main className="module-editor"><div className="card editor-section">
     <div className="eyebrow">ONYITECH · RESEARCH STUDY</div><h1>{form.instrument_title}</h1>
     <div className="notice"><strong>Participant information</strong><p style={{whiteSpace:"pre-wrap"}}>{form.participant_information}</p></div>{form.purpose&&<p>{form.purpose}</p>}{form.target_population&&<p className="muted">{form.target_population}</p>}
-    {!started?<><h3>Before you begin</h3><p>{form.consent_text}</p><label className="checkbox-label"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/> I have read the information above and voluntarily agree to participate.</label><p>{form.eligibility_text}</p><label className="checkbox-label"><input type="checkbox" checked={eligible} onChange={e=>setEligible(e.target.checked)}/> I confirm that I meet the eligibility criteria.</label><div className="notice"><strong>Withdrawal information</strong><p>{form.withdrawal_text}</p></div><button className="button primary" type="button" disabled={!consent||!eligible} onClick={()=>{setStarted(true);setStartTime(Date.now())}}>Continue to questionnaire</button></>:<>
+    {!started?<><h3>Before you begin</h3><p>{form.consent_text}</p><label className="checkbox-label"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/> I have read the information above and voluntarily agree to participate.</label><p>{form.eligibility_text}</p><label className="checkbox-label"><input type="checkbox" checked={eligible} onChange={e=>setEligible(e.target.checked)}/> I confirm that I meet the eligibility criteria.</label><div className="notice"><strong>Withdrawal information</strong><p>{form.withdrawal_text}</p></div><button className="button primary" type="button" disabled={!consent||!eligible} onClick={()=>{setConsentedAt(new Date().toISOString());setStarted(true);setStartTime(Date.now())}}>Continue to questionnaire</button></>:<>
       {form.instrument_instructions&&<p>{form.instrument_instructions}</p>}<p className="muted">Progress: {count} of {items.length} answered</p><progress max={items.length||1} value={count} style={{width:"100%"}}/>
       {form.instrument_sections.map(s=><section key={s.section_id}><h2>{s.title}</h2>{s.description&&<p className="muted">{s.description}</p>}{items.filter(i=>i.section_id===s.section_id).map(i=>question(i,items.indexOf(i)))}</section>)}
       {items.filter(i=>!form.instrument_sections.some(s=>s.section_id===i.section_id)).map(i=>question(i,items.indexOf(i)))}
