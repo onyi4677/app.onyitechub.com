@@ -83,6 +83,7 @@ export default function ResearchPublicationWorkflow({ projectId, versions }: { p
       </select>
     </label>
     <h4>Study approval record</h4>
+    <p className="muted">These fields may remain blank while approval is pending and during staging tests. Enter only the actual approval details when they have been issued.</p>
     <label>Ethics committee / approving institution<input value={ethicsCommittee} onChange={e => setEthicsCommittee(e.target.value)} maxLength={300} /></label>
     <label>Approval reference / protocol number<input value={approvalReference} onChange={e => setApprovalReference(e.target.value)} maxLength={200} /></label>
     <label>Approval date<input type="date" value={approvalDate} onChange={e => setApprovalDate(e.target.value)} /></label>
@@ -101,13 +102,13 @@ export default function ResearchPublicationWorkflow({ projectId, versions }: { p
     </label>
     <label>Consent document version<input value={consentVersion} onChange={e => setConsentVersion(e.target.value)} maxLength={100} /></label>
     <p className="muted">The system records the approval details and a hash of the participant-information and consent text shown to each participant. It does not generate or certify ethics approval.</p>
-    <button className="button primary" type="button" disabled={busy || !selected || !ethicsCommittee.trim() || !approvalReference.trim() || !approvalDate || information.trim().length < 100 || consent.trim().length < 30 || eligibility.trim().length < 20 || withdrawal.trim().length < 20 || !consentVersion.trim()} onClick={publish}>{busy ? "Working..." : "Create research collection link"}</button>
+    <button className="button primary" type="button" disabled={busy || !selected || information.trim().length < 100 || consent.trim().length < 30 || eligibility.trim().length < 20 || withdrawal.trim().length < 20 || !consentVersion.trim()} onClick={publish}>{busy ? "Working..." : "Create research collection link"}</button>
     {link && <div className="notice"><strong>Research participant link</strong><p><a href={link} target="_blank" rel="noreferrer">{link}</a></p><button className="button" type="button" onClick={() => navigator.clipboard.writeText(link)}>Copy link</button></div>}
     {error && <div className="notice" role="alert">{error}</div>}
     <h4>Research collection records</h4>
     {records.length === 0 ? <p className="muted">No research collection links have been created.</p> : records.map(record => <div className="card editor-section" key={record.publication_id}>
       <div className="editor-actions"><strong>Version {record.version_number} · {record.response_count} research responses</strong><span className="eyebrow">RESEARCH DATA</span></div>
-      <p className="muted">{record.ethics_committee} · {record.approval_reference} · {record.approval_date}</p>
+      <p className="muted">{[record.ethics_committee, record.approval_reference, record.approval_date].filter(Boolean).join(" · ") || "Approval details not entered"}</p>
       <p className="muted">Consent version {record.consent_version} · {record.status} · Created {new Date(record.created_at).toLocaleString()}</p>
       <div className="editor-actions">
         <button className="button" type="button" disabled={busy || record.response_count === 0} onClick={() => exportCsv(record.publication_id)}>Export research responses (CSV)</button>
