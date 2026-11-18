@@ -3,11 +3,13 @@ import unittest
 from unittest.mock import patch
 
 from fastapi import HTTPException
+from botocore.exceptions import ClientError
 
 from app.api.research_publication_routes import (
     ResearchPublishRequest,
     ResearchSubmitRequest,
     create_research_publication,
+    close_research_publication,
     get_public_research_publication,
     submit_research_publication,
 )
@@ -112,6 +114,46 @@ class ResearchPublicationRouteTests(unittest.TestCase):
         self.assertEqual(stored["ethics_committee"], "")
         self.assertEqual(stored["approval_reference"], "")
         self.assertEqual(stored["approval_date"], "")
+
+    @patch("app.api.research_publication_routes.projects_table.update_item")
+    @patch("app.api.research_publication_routes.scan_all")
+    @patch("app.api.research_publication_routes.owned_project")
+    def test_close_research_publication_updates_open_collection(self, owned_project, scan_all_mock, update_item):
+        owned_project.return_value = project()
+        scan_all_mock.return_value = [{"id": "publication-key", "status": "research_open"}]
+        result = close_research_publication("project-1", "pub-1", user=self.user)
+        self.assertEqual(result, {"status": "research_closed"})
+        self.assertEqual(update_item.call_args.kwargs["Key"], {"id": "publication-key"})
+        self.assertIn("research_closed", update_item.call_args.kwargs["ExpressionAttributeValues"].values())
+
+    @patch("app.api.research_publication_routes.projects_table.update_item")
+    @patch("app.api.research_publication_routes.scan_all")
+    @patch("app.api.research_publication_routes.owned_project")
+    def test_close_research_publication_returns_conflict_when_already_closed(self, owned_project, scan_all_mock, update_item):
+        owned_project.return_value = project()
+        scan_all_mock.return_value = [{"id": "publication-key", "status": "research_open"}]
+        update_item.side_effect = ClientError(
+            {"Error": {"Code": "ConditionalCheckFailedException", "Message": "condition failed"}},
+            "UpdateItem",
+        )
+        with self.assertRaises(HTTPException) as raised:
+            close_research_publication("project-1", "pub-1", user=self.user)
+        self.assertEqual(raised.exception.status_code, 409)
+
+    @patch("app.api.research_publication_routes.projects_table.update_item")
+    @patch("app.api.research_publication_routes.scan_all")
+    @patch("app.api.research_publication_routes.owned_project")
+    def test_close_research_publication_maps_database_failure_to_500(self, owned_project, scan_all_mock, update_item):
+        owned_project.return_value = project()
+        scan_all_mock.return_value = [{"id": "publication-key", "status": "research_open"}]
+        update_item.side_effect = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "not authorized"}},
+            "UpdateItem",
+        )
+        with self.assertRaises(HTTPException) as raised:
+            close_research_publication("project-1", "pub-1", user=self.user)
+        self.assertEqual(raised.exception.status_code, 500)
+        self.assertEqual(raised.exception.detail, "Unable to close the research collection link.")
 
     @patch("app.api.research_publication_routes.projects_table.get_item")
     def test_public_endpoint_returns_participant_documents_and_versioned_consent(self, get_item):
