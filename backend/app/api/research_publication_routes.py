@@ -39,9 +39,9 @@ def owned_project(project_id: str, user: dict[str, Any]) -> dict[str, Any]:
 
 class ResearchPublishRequest(BaseModel):
     version_id: str = Field(min_length=1, max_length=200)
-    ethics_committee: str = Field(min_length=3, max_length=300)
-    approval_reference: str = Field(min_length=2, max_length=200)
-    approval_date: date
+    ethics_committee: str | None = Field(default=None, min_length=3, max_length=300)
+    approval_reference: str | None = Field(default=None, min_length=2, max_length=200)
+    approval_date: date | None = None
     participant_information: str = Field(min_length=100, max_length=20000)
     consent_text: str = Field(min_length=30, max_length=5000)
     eligibility_text: str = Field(min_length=20, max_length=2000)
@@ -99,9 +99,9 @@ def create_research_publication(
         "status": "research_open",
         "mode": "research",
         "is_test": False,
-        "ethics_committee": payload.ethics_committee.strip(),
-        "approval_reference": payload.approval_reference.strip(),
-        "approval_date": payload.approval_date.isoformat(),
+        "ethics_committee": payload.ethics_committee.strip() if payload.ethics_committee else "",
+        "approval_reference": payload.approval_reference.strip() if payload.approval_reference else "",
+        "approval_date": payload.approval_date.isoformat() if payload.approval_date else "",
         "participant_information": info,
         "consent_text": consent,
         "eligibility_text": payload.eligibility_text.strip(),
