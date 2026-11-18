@@ -74,3 +74,83 @@ export async function submitPublicParticipantQuestionnaire(input: Record<string,
   }
   return response.json();
 }
+
+export type ResearchPublication = {
+  publication_id: string;
+  version_id: string;
+  version_number: number;
+  status: "research_open" | "research_closed";
+  mode: "research";
+  is_test: false;
+  created_at: string;
+  ethics_committee: string;
+  approval_reference: string;
+  approval_date: string;
+  consent_version: string;
+  response_count: number;
+};
+
+export function createResearchPublication(projectId: string, payload: Record<string, unknown>) {
+  return apiRequest<{
+    publication_id: string;
+    token: string;
+    public_url_path: string;
+    version_number: number;
+    status: string;
+    mode: "research";
+  }>("/api/projects/" + encodeURIComponent(projectId) + "/research-publications", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listResearchPublications(projectId: string) {
+  return apiRequest<{ publications: ResearchPublication[] }>(
+    "/api/projects/" + encodeURIComponent(projectId) + "/research-publications",
+  );
+}
+
+export function closeResearchPublication(projectId: string, publicationId: string) {
+  return apiRequest<{ status: string }>(
+    "/api/projects/" + encodeURIComponent(projectId) + "/research-publications/" + encodeURIComponent(publicationId) + "/close",
+    { method: "POST" },
+  );
+}
+
+export async function exportResearchPublication(projectId: string, publicationId: string) {
+  const token = await (await import("../auth")).getAccessToken();
+  const response = await fetch(
+    apiBase() + "/api/projects/" + encodeURIComponent(projectId) + "/research-publications/" + encodeURIComponent(publicationId) + "/export",
+    { headers: token ? { Authorization: "Bearer " + token } : {} },
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || "Unable to export research responses.");
+  }
+  return response.blob();
+}
+
+export async function getPublicResearchQuestionnaire(token: string): Promise<any> {
+  const response = await fetch(
+    apiBase() + "/api/public/research-publications/" + encodeURIComponent(token),
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || "Research questionnaire unavailable.");
+  }
+  return response.json();
+}
+
+export async function submitPublicResearchQuestionnaire(input: Record<string, unknown>): Promise<any> {
+  const response = await fetch(apiBase() + "/api/public/research-publications/submit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || "Unable to submit research response.");
+  }
+  return response.json();
+}
