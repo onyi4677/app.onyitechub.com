@@ -10,7 +10,7 @@ from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.auth import require_user
 from app.db import projects_table
@@ -47,6 +47,13 @@ class ResearchPublishRequest(BaseModel):
     eligibility_text: str = Field(min_length=20, max_length=2000)
     withdrawal_text: str = Field(min_length=20, max_length=3000)
     consent_version: str = Field(min_length=1, max_length=100)
+
+    @field_validator("ethics_committee", "approval_reference", "approval_date", mode="before")
+    @classmethod
+    def normalize_blank_approval_fields(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class ResearchSubmitRequest(BaseModel):
