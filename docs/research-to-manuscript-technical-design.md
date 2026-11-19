@@ -344,3 +344,47 @@ Frontend tests/manual staging acceptance should cover:
 ---
 
 **Technical direction:** use the existing project/module architecture as the source integration boundary; add a dedicated, versioned manuscript domain for assembly and editing; preserve large-content storage outside the single project DynamoDB item; and validate the complete workflow in staging with Project 001.
+
+
+## 14. Temporary retention, researcher export and cleanup
+
+The Manuscript Development workspace is temporary by default. The initial retention policy is a maximum of **30 calendar days from workspace creation**, with a shorter period permitted by configuration. The expiry date must be visible to the researcher. The policy applies only to manuscript-development data and generated temporary files; it must never delete or modify the original project, research foundation, Literature and Evidence, Study Screening, Reference and Citation, or Methodology module data.
+
+### 14.1 Export before expiry
+
+Researchers must be able to export the manuscript during development and before expiry. The initial export formats are:
+
+- **DOCX** — editable manuscript.
+- **PDF** — formatted read-only copy.
+
+The export should include the complete current manuscript, its approved section content, tables and figures with captions, in-text citations and reference list. Where applicable, the researcher may also include supplementary research materials and a validation/development report. Export must preserve source attribution and must not present unresolved or unverified information as verified. Export availability must not depend on the manuscript being approved; the UI should clearly distinguish draft exports from approved versions.
+
+Exports should be generated on request and delivered for researcher download. The system should not treat an export left in temporary S3 storage as the researcher's permanent archive. The researcher is responsible for downloading and retaining their own copy.
+
+### 14.2 Expiry and reminders
+
+- Set `expires_at` when the manuscript workspace is created; default to 30 days after creation.
+- Display the expiry date and remaining retention period in the workspace.
+- Provide an in-app reminder before expiry (recommended: seven days and one day before expiry).
+- Provide a researcher-controlled **Delete workspace now** action, with confirmation and a clear explanation that source research modules are not affected.
+- At expiry, mark the workspace expired and prevent further editing/export from the expired workspace. Provide a clear expiry state rather than silently hiding the workspace.
+- Cleanup must be idempotent and retryable; a partial failure must be recorded for safe retry.
+
+### 14.3 Deletion scope and implementation
+
+The cleanup operation must delete all temporary manuscript-domain DynamoDB items and all associated S3 objects. If S3 bucket versioning is enabled, cleanup must also remove noncurrent object versions and delete markers; deleting only the current object key is insufficient. A dedicated manuscript bucket/prefix must not share lifecycle rules with integrity submissions.
+
+Use a scheduled cleanup worker for deterministic deletion and status reporting. DynamoDB TTL may be used as a secondary safety net, but must not be the only cleanup mechanism because TTL deletion is asynchronous. S3 lifecycle expiration may provide a secondary safeguard, scoped exclusively to manuscript objects. Retention metadata and cleanup status should make it possible to identify workspaces awaiting deletion and retry failures.
+
+The cleanup service must be constrained to manuscript resources and must never delete source module records or project metadata. It must not delete the research project itself. A manual deletion request must follow the same scoped cleanup path.
+
+### 14.4 Staging acceptance criteria
+
+- Workspace expiry defaults to 30 days and is visible in the UI.
+- DOCX and PDF exports can be generated and downloaded before expiry.
+- Exported content includes the current manuscript sections, tables, figures, citations and references supported by the manuscript data.
+- Pre-expiry reminders are presented to the researcher.
+- Manual early deletion removes only manuscript workspace records and associated manuscript files.
+- Expiry cleanup removes manuscript records and every associated S3 object version while preserving all source project modules and screening records.
+- Cleanup can be safely retried without deleting unrelated data.
+- Staging tests verify the expiry and cleanup workflow before any production consideration.
