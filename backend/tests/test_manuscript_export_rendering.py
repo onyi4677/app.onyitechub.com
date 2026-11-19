@@ -36,6 +36,7 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         self.assertIn("Methods", document_xml)
         self.assertLess(document_xml.index("Abstract"), document_xml.index("Methods"))
         self.assertIn("First paragraph.", document_xml)
+        self.assertIn("WORKING DRAFT", document_xml)
 
     def test_pdf_is_valid_pdf_and_contains_manuscript_text(self):
         data = render_pdf(
@@ -44,6 +45,9 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         )
         self.assertTrue(data.startswith(b"%PDF-"))
         self.assertGreater(len(data), 500)
+        from pypdf import PdfReader
+        pdf_text = "\\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(data)).pages)
+        self.assertIn("WORKING DRAFT", pdf_text)
 
     def test_rejects_duplicate_or_invalid_section_ids(self):
         invalid = [self.sections[0], dict(self.sections[0])]
