@@ -5,6 +5,7 @@ from botocore.exceptions import ClientError
 from fastapi import HTTPException
 
 from app.db import projects_table
+from app.services.study_screening_storage import is_configured as screening_storage_is_configured, load as load_screening_storage, save as save_screening_storage
 
 
 def _now() -> str:
@@ -93,6 +94,54 @@ def _protect_instrument_history(
     result["pathways"] = next_pathways
     return result
 
+
+def _legacy_screening_module(modules: dict[str, Any]) -> dict[str, Any]:
+    standalone = modules.get("study_screening")
+    standalone = standalone if isinstance(standalone, dict) else {}
+    methodology = modules.get("methodology")
+    methodology = methodology if isinstance(methodology, dict) else {}
+    legacy = methodology.get("study_screening")
+    legacy = legacy if isinstance(legacy, dict) else {}
+
+    standalone_records = standalone.get("records")
+    legacy_records = legacy.get("records")
+    if (
+        (not isinstance(standalone_records, list) or not standalone_records)
+        and isinstance(legacy_records, list)
+        and legacy_records
+    ):
+        return legacy
+    return standalone or legacy
+
+
+def _touch_project_after_screening_save(project_id: str, modules: dict[str, Any]) -> None:
+    names = {"#updated": "updated_at"}
+    remove_paths = []
+    if "study_screening" in modules:
+        names["#modules"] = "modules"
+        names["#standalone"] = "study_screening"
+        remove_paths.append("#modules.#standalone")
+    methodology = modules.get("methodology")
+    if isinstance(methodology, dict) and "study_screening" in methodology:
+        names["#modules"] = "modules"
+        names["#methodology"] = "methodology"
+        names["#legacy"] = "study_screening"
+        remove_paths.append("#modules.#methodology.#legacy")
+
+    expression = "SET #updated = :now"
+    if remove_paths:
+        expression += " REMOVE " + ", ".join(remove_paths)
+    try:
+        projects_table.update_item(
+            Key={"id": project_id},
+            UpdateExpression=expression,
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues={":now": _now()},
+        )
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Study Screening was saved, but project metadata could not be updated") from exc
+
+
 def save_module(
     project_id: str,
     module_key: str,
@@ -114,6 +163,11 @@ def save_module(
         )
 
     modules = dict(project.get("modules") or {})
+    if module_key == "study_screening" and screening_storage_is_configured():
+        saved_content = save_screening_storage(project_id, content)
+        _touch_project_after_screening_save(project_id, modules)
+        return saved_content
+
     if module_key == "instruments":
         previous = modules.get("instruments")
         previous = previous if isinstance(previous, dict) else {}
@@ -154,6 +208,17 @@ def get_module(
 
     modules = project.get("modules") or {}
     module = modules.get(module_key)
+
+    if module_key == "study_screening" and screening_storage_is_configured():
+        stored = load_screening_storage(project_id)
+        if stored is not None:
+            return stored
+        legacy = _legacy_screening_module(modules)
+        if legacy:
+            migrated = save_screening_storage(project_id, legacy)
+            _touch_project_after_screening_save(project_id, modules)
+            return migrated
+        return {}
 
     # Backward compatibility: older versions stored screening inside methodology.
     # Prefer a populated standalone screening module, but do not hide legacy records
