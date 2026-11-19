@@ -420,3 +420,30 @@ These names and settings are design proposals; the resources and IAM permissions
 ### 15.2 Staging deployment workflow
 
 The current `.github/workflows/deploy-staging-lambda.yml` deploys to `onyitech-research-api-staging` for `main` and a fixed list of feature branches. The branch `feat/research-to-manuscript-engine` is not currently on that list. Before backend implementation is pushed for this feature, update the staging workflow on the feature branch so its backend changes can be deployed to the isolated staging Lambda. Do not add this feature to any production deployment workflow. A workflow change that triggers a staging deployment should be coordinated with the implementation so an unneeded baseline redeployment is avoided.
+
+
+## 16. Manuscript persistence foundation — implementation in progress
+
+The first persistence service is being added on the feature branch. It is intentionally disabled until the dedicated staging table is provisioned and `MANUSCRIPTS_TABLE_NAME` is configured.
+
+### 16.1 DynamoDB record layout
+
+The planned table uses partition key `project_id` (String) and sort key `record_key` (String). A project partition contains only manuscript-domain records:
+
+- `WORKSPACE` — one workspace metadata record per project.
+- `VERSION#{version_id}` — immutable version metadata and source-snapshot pointer.
+- `SECTION#{version_id}#{section_id}` — one independently editable section record.
+
+Workspace metadata tracks the retention phase, development deadline, most recent successful export, current expiry, cleanup status, and TTL timestamp. The development deadline is 30 days from creation. The first successful DOCX/PDF export switches the expiry to 14 days after export; later successful exports reset that deadline.
+
+The cleanup index should use partition key `cleanup_status` (String) and sort key `cleanup_at` (Number), so due workspaces can be queried without scanning. TTL is a secondary safety net only.
+
+### 16.2 Payload and file boundaries
+
+DynamoDB stores bounded metadata and individual section records only. Full source snapshots and generated DOCX/PDF files belong in the dedicated private manuscript S3 bucket, with object keys recorded in the corresponding manuscript records. Do not put full project-module payloads or complete manuscript histories into a single DynamoDB item.
+
+### 16.3 Current code boundary
+
+The initial `manuscript_storage.py` service provides workspace creation/retrieval, version metadata, section saves, successful-export retention updates, and manuscript-table-only workspace deletion. The optional table binding in `db.py` means existing deployments without `MANUSCRIPTS_TABLE_NAME` remain unaffected. No route calls this service until staging storage and object-storage handling are ready.
+
+Deletion of S3 objects and all object versions, scheduled expiry cleanup, notifications, and export generation remain separate implementation tasks. Do not treat DynamoDB-only deletion as complete workspace deletion once S3 objects are introduced.
