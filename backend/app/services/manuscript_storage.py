@@ -9,7 +9,10 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 from typing import Any
+
+from boto3.dynamodb.conditions import Key
 from uuid import uuid4
+import logging
 
 from botocore.exceptions import ClientError
 from fastapi import HTTPException
@@ -21,6 +24,8 @@ from app.services.manuscript_objects import delete_all_manuscript_object_version
 DEVELOPMENT_RETENTION_DAYS = 30
 POST_EXPORT_RETENTION_DAYS = 14
 WORKSPACE_KEY = "WORKSPACE"
+CLEANUP_INDEX_NAME = "cleanup-index"
+logger = logging.getLogger(__name__)
 
 
 def _now_epoch() -> int:
@@ -325,3 +330,145 @@ def delete_workspace(project_id: str, owner_sub: str) -> None:
         )
     except ClientError as exc:
         raise HTTPException(status_code=500, detail="Unable to delete manuscript workspace.") from exc
+
+
+
+def cleanup_expired_workspaces(
+    now_epoch: int | None = None,
+    page_size: int = 100,
+    table=None,
+    object_deleter=delete_all_manuscript_object_versions,
+) -> dict[str, int]:
+    """Delete expired manuscript workspaces and all their object versions.
+
+    A bounded GSI page is processed per invocation. A short conditional lease
+    prevents overlapping scheduled invocations from deleting the same workspace.
+    Failed items retain their pending cleanup index entry for a later retry.
+    """
+    if page_size < 1 or page_size > 1000:
+        raise ValueError("page_size must be between 1 and 1000")
+
+    target = table or _table()
+    now = int(now_epoch if now_epoch is not None else _now_epoch())
+    checked = cleaned = failed = 0
+
+    try:
+        response = target.query(
+            IndexName=CLEANUP_INDEX_NAME,
+            KeyConditionExpression=Key("cleanup_status").eq("pending") & Key("cleanup_at").lte(now),
+            Limit=page_size,
+        )
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to query expired manuscript workspaces.") from exc
+
+    for candidate in response.get("Items", []):
+        checked += 1
+        project_id = candidate.get("project_id")
+        manuscript_id = candidate.get("manuscript_id")
+        if not isinstance(project_id, str) or not isinstance(manuscript_id, str):
+            failed += 1
+            continue
+
+        token = str(uuid4())
+        acquired = False
+        try:
+            target.update_item(
+                Key={"project_id": project_id, "record_key": WORKSPACE_KEY},
+                UpdateExpression="SET cleanup_lease_token = :token, cleanup_lease_until = :lease_until",
+                ConditionExpression=(
+                    "cleanup_status = :pending AND cleanup_at <= :now "
+                    "AND (attribute_not_exists(cleanup_lease_until) OR cleanup_lease_until <= :now)"
+                ),
+                ExpressionAttributeValues={
+                    ":token": token,
+                    ":lease_until": now + 120,
+                    ":pending": "pending",
+                    ":now": now,
+                },
+            )
+            acquired = True
+
+            fresh = target.get_item(
+                Key={"project_id": project_id, "record_key": WORKSPACE_KEY},
+                ConsistentRead=True,
+            ).get("Item")
+            if (
+                not fresh
+                or fresh.get("manuscript_id") != manuscript_id
+                or fresh.get("cleanup_lease_token") != token
+                or int(fresh.get("cleanup_at", now + 1)) > now
+            ):
+                continue
+
+            object_deleter(project_id, manuscript_id)
+
+            response = target.query(
+                KeyConditionExpression=Key("project_id").eq(project_id),
+                ConsistentRead=True,
+            )
+            records = list(response.get("Items", []))
+            while response.get("LastEvaluatedKey"):
+                response = target.query(
+                    KeyConditionExpression=Key("project_id").eq(project_id),
+                    ExclusiveStartKey=response["LastEvaluatedKey"],
+                    ConsistentRead=True,
+                )
+                records.extend(response.get("Items", []))
+
+            with target.batch_writer() as batch:
+                for record in records:
+                    if (
+                        record.get("record_key") != WORKSPACE_KEY
+                        and record.get("manuscript_id") == manuscript_id
+                    ):
+                        batch.delete_item(
+                            Key={
+                                "project_id": project_id,
+                                "record_key": record["record_key"],
+                            }
+                        )
+
+            target.delete_item(
+                Key={"project_id": project_id, "record_key": WORKSPACE_KEY},
+                ConditionExpression=(
+                    "cleanup_status = :pending AND cleanup_at <= :now "
+                    "AND cleanup_lease_token = :token AND manuscript_id = :manuscript"
+                ),
+                ExpressionAttributeValues={
+                    ":pending": "pending",
+                    ":now": now,
+                    ":token": token,
+                    ":manuscript": manuscript_id,
+                },
+            )
+            cleaned += 1
+        except Exception as exc:
+            failed += 1
+            logger.warning(
+                "Manuscript retention cleanup failed for a workspace (%s).",
+                type(exc).__name__,
+            )
+        finally:
+            if acquired:
+                try:
+                    target.update_item(
+                        Key={"project_id": project_id, "record_key": WORKSPACE_KEY},
+                        UpdateExpression="REMOVE cleanup_lease_token, cleanup_lease_until",
+                        ConditionExpression="cleanup_lease_token = :token AND cleanup_status = :pending",
+                        ExpressionAttributeValues={
+                            ":token": token,
+                            ":pending": "pending",
+                        },
+                    )
+                except ClientError:
+                    # Successful cleanup deletes the workspace; failures retain
+                    # the pending item and can release the lease on the next run.
+                    pass
+
+    logger.info(
+        "Manuscript retention cleanup finished: checked=%s cleaned=%s failed=%s",
+        checked,
+        cleaned,
+        failed,
+    )
+    return {"checked": checked, "cleaned": cleaned, "failed": failed}
