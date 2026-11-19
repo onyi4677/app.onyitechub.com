@@ -77,6 +77,9 @@ def render_docx(
     if article_type.strip():
         p = document.add_paragraph(article_type.replace("_", " ").title())
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if any(item.get("status") != "approved" for item in sections):
+        p = document.add_paragraph("WORKING DRAFT — one or more sections are not approved")
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p = document.add_paragraph(f"Generated {generated.astimezone(timezone.utc).isoformat()}")
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_page_break()
