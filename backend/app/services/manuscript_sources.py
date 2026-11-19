@@ -12,7 +12,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from app.services.canonical_sources import build_canonical_sources
-from app.services.project_modules import get_module
+from app.services.project_modules import get_module_read_only
 
 
 SOURCE_MODULE_KEYS = (
@@ -76,7 +76,7 @@ def collect_project_sources(
     if not isinstance(project, dict) or project.get("id") != project_id:
         raise ValueError("The authorized project record does not match the project ID.")
 
-    loader = module_loader or get_module
+    loader = module_loader or get_module_read_only
     module_snapshots: dict[str, dict[str, Any]] = {}
     canonical_project = deepcopy(project)
     canonical_project["modules"] = dict(canonical_project.get("modules") or {})
