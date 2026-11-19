@@ -15,6 +15,7 @@ from botocore.exceptions import ClientError
 from fastapi import HTTPException
 
 from app.db import manuscript_table
+from app.services.manuscript_objects import delete_all_manuscript_object_versions
 
 
 DEVELOPMENT_RETENTION_DAYS = 30
@@ -291,6 +292,9 @@ def record_successful_export(
 def delete_workspace(project_id: str, owner_sub: str) -> None:
     """Delete manuscript-domain rows only; source project modules are never touched."""
     workspace = _workspace_for_owner(project_id, owner_sub, allow_expired=True)
+    # Remove every S3 object version before deleting the DynamoDB manifest. If
+    # object cleanup fails, retain metadata so the researcher/worker can retry.
+    delete_all_manuscript_object_versions(project_id, workspace["manuscript_id"])
     table = _table()
     try:
         response = table.query(
