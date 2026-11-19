@@ -84,7 +84,7 @@ def _table():
     return manuscript_table
 
 
-def _workspace_for_owner(project_id: str, owner_sub: str) -> dict[str, Any]:
+def _workspace_for_owner(project_id: str, owner_sub: str, allow_expired: bool = False) -> dict[str, Any]:
     try:
         item = _table().get_item(
             Key={"project_id": project_id, "record_key": WORKSPACE_KEY},
@@ -95,7 +95,9 @@ def _workspace_for_owner(project_id: str, owner_sub: str) -> dict[str, Any]:
 
     if not item or item.get("owner_sub") != owner_sub:
         raise HTTPException(status_code=404, detail="Manuscript workspace not found.")
-    if item.get("status") == "expired" or int(item.get("expires_at", 0)) <= _now_epoch():
+    if not allow_expired and (
+        item.get("status") == "expired" or int(item.get("expires_at", 0)) <= _now_epoch()
+    ):
         raise HTTPException(status_code=410, detail="This manuscript workspace has expired.")
     return item
 
@@ -288,7 +290,7 @@ def record_successful_export(
 
 def delete_workspace(project_id: str, owner_sub: str) -> None:
     """Delete manuscript-domain rows only; source project modules are never touched."""
-    workspace = _workspace_for_owner(project_id, owner_sub)
+    workspace = _workspace_for_owner(project_id, owner_sub, allow_expired=True)
     table = _table()
     try:
         response = table.query(
