@@ -348,11 +348,11 @@ Frontend tests/manual staging acceptance should cover:
 
 ## 14. Temporary retention, researcher export and cleanup
 
-The Manuscript Development workspace is temporary by default. The initial retention policy is a maximum of **30 calendar days from workspace creation**, with a shorter period permitted by configuration. The expiry date must be visible to the researcher. The policy applies only to manuscript-development data and generated temporary files; it must never delete or modify the original project, research foundation, Literature and Evidence, Study Screening, Reference and Citation, or Methodology module data.
+The Manuscript Development workspace is temporary by default. The initial retention policy is a **14 calendar days after the first successful DOCX or PDF export**. Manuscript development itself does not start the retention countdown. The expiry date must be visible to the researcher. The policy applies only to manuscript-development data and generated temporary files; it must never delete or modify the original project, research foundation, Literature and Evidence, Study Screening, Reference and Citation, or Methodology module data.
 
-### 14.1 Export before expiry
+### 14.1 Export and retention start
 
-Researchers must be able to export the manuscript during development and before expiry. The initial export formats are:
+Researchers must be able to export the manuscript during development. The first successful export starts the 14-day retention period; each subsequent successful export resets it. The initial export formats are:
 
 - **DOCX** — editable manuscript.
 - **PDF** — formatted read-only copy.
@@ -363,11 +363,14 @@ Exports should be generated on request and delivered for researcher download. Th
 
 ### 14.2 Expiry and reminders
 
-- Set `expires_at` when the manuscript workspace is created; default to 30 days after creation.
-- Display the expiry date and remaining retention period in the workspace.
-- Provide an in-app reminder before expiry (recommended: seven days and one day before expiry).
+- Do not set the retention countdown merely because a workspace is created or manuscript development begins.
+- Start the 14-calendar-day countdown only after a DOCX or PDF export has been generated successfully and made available to the researcher.
+- A later successful export resets the expiry to 14 calendar days after that export.
+- Display the expiry date and remaining retention period in the workspace once the countdown has started.
+- Provide reminders seven days and one day before expiry, subject to a working notification channel.
 - Provide a researcher-controlled **Delete workspace now** action, with confirmation and a clear explanation that source research modules are not affected.
 - At expiry, mark the workspace expired and prevent further editing/export from the expired workspace. Provide a clear expiry state rather than silently hiding the workspace.
+- If no successful export has occurred, the post-export retention countdown has not started; a separate maximum development-period policy must be defined before launch rather than silently applying the 14-day post-export rule.
 - Cleanup must be idempotent and retryable; a partial failure must be recorded for safe retry.
 
 ### 14.3 Deletion scope and implementation
@@ -380,10 +383,10 @@ The cleanup service must be constrained to manuscript resources and must never d
 
 ### 14.4 Staging acceptance criteria
 
-- Workspace expiry defaults to 30 days and is visible in the UI.
+- The 14-day expiry is calculated from the most recent successful export and is visible in the UI.
 - DOCX and PDF exports can be generated and downloaded before expiry.
 - Exported content includes the current manuscript sections, tables, figures, citations and references supported by the manuscript data.
-- Pre-expiry reminders are presented to the researcher.
+- Seven-day and one-day pre-expiry reminders are presented to the researcher.
 - Manual early deletion removes only manuscript workspace records and associated manuscript files.
 - Expiry cleanup removes manuscript records and every associated S3 object version while preserving all source project modules and screening records.
 - Cleanup can be safely retried without deleting unrelated data.
