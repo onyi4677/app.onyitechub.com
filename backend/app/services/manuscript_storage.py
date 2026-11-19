@@ -6,7 +6,6 @@ in DynamoDB. The table is optional until staging infrastructure is provisioned.
 """
 from __future__ import annotations
 
-import os
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -96,7 +95,7 @@ def _workspace_for_owner(project_id: str, owner_sub: str) -> dict[str, Any]:
 
     if not item or item.get("owner_sub") != owner_sub:
         raise HTTPException(status_code=404, detail="Manuscript workspace not found.")
-    if item.get("status") == "expired":
+    if item.get("status") == "expired" or int(item.get("expires_at", 0)) <= _now_epoch():
         raise HTTPException(status_code=410, detail="This manuscript workspace has expired.")
     return item
 
@@ -165,19 +164,27 @@ def create_version(
         table.update_item(
             Key={"project_id": project_id, "record_key": WORKSPACE_KEY},
             UpdateExpression="SET latest_version_number = :number, current_version_id = :version, updated_at = :now",
-            ConditionExpression="owner_sub = :owner AND manuscript_id = :manuscript",
+            ConditionExpression=(
+                "owner_sub = :owner AND manuscript_id = :manuscript "
+                "AND (attribute_not_exists(latest_version_number) OR latest_version_number = :previous)"
+            ),
             ExpressionAttributeValues={
                 ":number": version_number,
                 ":version": version_id,
                 ":now": now,
                 ":owner": owner_sub,
                 ":manuscript": workspace["manuscript_id"],
+                ":previous": version_number - 1,
             },
         )
     except ClientError as exc:
-        # If the pointer update fails, leave the immutable version item available
-        # for diagnosis; do not overwrite or delete another version.
-        raise HTTPException(status_code=409, detail="Unable to update the manuscript version pointer; refresh and retry.") from exc
+        try:
+            table.delete_item(
+                Key={"project_id": project_id, "record_key": f"VERSION#{version_id}"}
+            )
+        except ClientError:
+            pass
+        raise HTTPException(status_code=409, detail="The manuscript changed in another session; refresh and retry.") from exc
     return item
 
 
