@@ -8,6 +8,7 @@ on:
       - feature/project-topic-editing
       - feat/project-linked-instrument-builder
       - feat/research-data-collection
+      - feat/study-screening-excel-import
     paths:
       - "backend/**"
       - ".github/workflows/deploy-staging-lambda.yml"
