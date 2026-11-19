@@ -78,13 +78,14 @@ def get_project_manuscript_workspace(
     return get_workspace(project_id, user["sub"])
 
 
-@router.delete("/projects/{project_id}/manuscript/workspace", status_code=204)
+@router.delete("/projects/{project_id}/manuscript/workspace")
 def delete_project_manuscript_workspace(
     project_id: str,
     user: dict[str, Any] = Depends(require_user),
-) -> None:
+) -> dict[str, str]:
     _require_project_access(project_id, user)
     delete_workspace(project_id, user["sub"])
+    return {"status": "deleted"}
 
 
 @router.post("/projects/{project_id}/manuscript/sources/collect")
