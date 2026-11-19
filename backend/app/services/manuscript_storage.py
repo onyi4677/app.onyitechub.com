@@ -295,41 +295,85 @@ def record_successful_export(
 
 
 def delete_workspace(project_id: str, owner_sub: str) -> None:
-    """Delete manuscript-domain rows only; source project modules are never touched."""
+    """Delete manuscript-domain rows and every S3 version; never touch source modules."""
     workspace = _workspace_for_owner(project_id, owner_sub, allow_expired=True)
-    # Remove every S3 object version before deleting the DynamoDB manifest. If
-    # object cleanup fails, retain metadata so the researcher/worker can retry.
-    delete_all_manuscript_object_versions(project_id, workspace["manuscript_id"])
     table = _table()
+    token = str(uuid4())
+    now = _now_epoch()
+
     try:
+        table.update_item(
+            Key={"project_id": project_id, "record_key": WORKSPACE_KEY},
+            UpdateExpression="SET cleanup_lease_token = :token, cleanup_lease_until = :lease_until",
+            ConditionExpression=(
+                "owner_sub = :owner AND "
+                "(attribute_not_exists(cleanup_lease_until) OR cleanup_lease_until <= :now)"
+            ),
+            ExpressionAttributeValues={
+                ":owner": owner_sub,
+                ":token": token,
+                ":lease_until": now + 120,
+                ":now": now,
+            },
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            raise HTTPException(status_code=409, detail="Manuscript workspace is being cleaned up; retry shortly.") from exc
+        raise HTTPException(status_code=500, detail="Unable to lock manuscript workspace for deletion.") from exc
+
+    try:
+        # Remove every S3 object version before deleting the DynamoDB manifest.
+        # If object cleanup fails, retain metadata so the operation can be retried.
+        delete_all_manuscript_object_versions(project_id, workspace["manuscript_id"])
+
         response = table.query(
-            KeyConditionExpression="project_id = :project",
-            ExpressionAttributeValues={":project": project_id},
+            KeyConditionExpression=Key("project_id").eq(project_id),
             ConsistentRead=True,
         )
         items = list(response.get("Items", []))
         while response.get("LastEvaluatedKey"):
             response = table.query(
-                KeyConditionExpression="project_id = :project",
-                ExpressionAttributeValues={":project": project_id},
+                KeyConditionExpression=Key("project_id").eq(project_id),
                 ExclusiveStartKey=response["LastEvaluatedKey"],
                 ConsistentRead=True,
             )
             items.extend(response.get("Items", []))
+
         with table.batch_writer() as batch:
             for item in items:
-                if item.get("record_key") != WORKSPACE_KEY and item.get("manuscript_id") == workspace["manuscript_id"]:
-                    batch.delete_item(Key={"project_id": project_id, "record_key": item["record_key"]})
+                if (
+                    item.get("record_key") != WORKSPACE_KEY
+                    and item.get("manuscript_id") == workspace["manuscript_id"]
+                ):
+                    batch.delete_item(
+                        Key={"project_id": project_id, "record_key": item["record_key"]}
+                    )
+
         table.delete_item(
             Key={"project_id": project_id, "record_key": WORKSPACE_KEY},
-            ConditionExpression="owner_sub = :owner AND manuscript_id = :manuscript",
+            ConditionExpression=(
+                "owner_sub = :owner AND manuscript_id = :manuscript "
+                "AND cleanup_lease_token = :token"
+            ),
             ExpressionAttributeValues={
                 ":owner": owner_sub,
                 ":manuscript": workspace["manuscript_id"],
+                ":token": token,
             },
         )
-    except ClientError as exc:
-        raise HTTPException(status_code=500, detail="Unable to delete manuscript workspace.") from exc
+    except Exception as exc:
+        try:
+            table.update_item(
+                Key={"project_id": project_id, "record_key": WORKSPACE_KEY},
+                UpdateExpression="REMOVE cleanup_lease_token, cleanup_lease_until",
+                ConditionExpression="cleanup_lease_token = :token",
+                ExpressionAttributeValues={":token": token},
+            )
+        except ClientError:
+            pass
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail="Unable to delete manuscript workspace; retry is safe.") from exc
 
 
 
