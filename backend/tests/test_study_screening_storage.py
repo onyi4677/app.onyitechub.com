@@ -1,4 +1,5 @@
 import unittest
+from decimal import Decimal
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -108,6 +109,19 @@ class StudyScreeningStorageTests(unittest.TestCase):
         ]
         self.assertEqual(len(data_items), 5)
         self.assertIn(("project-1", "META"), self.table.items)
+
+    def test_metadata_size_check_accepts_dynamodb_decimal_values(self):
+        content = {
+            "review_type": "scoping",
+            "progress": Decimal("0.75"),
+            "records": [],
+        }
+
+        saved = storage.save("project-1", content)
+        loaded = storage.load("project-1")
+
+        self.assertEqual(saved["progress"], Decimal("0.75"))
+        self.assertEqual(loaded["progress"], Decimal("0.75"))
 
     def test_rejects_an_oversized_single_entry_before_writing(self):
         content = {"records": [{"notes": "x" * (301 * 1024)}]}
