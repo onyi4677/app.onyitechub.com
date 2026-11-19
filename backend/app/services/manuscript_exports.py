@@ -11,7 +11,7 @@ from fastapi import HTTPException
 
 from app.db import manuscript_table
 from app.services.manuscript_export_rendering import render_docx, render_pdf
-from app.services.manuscript_objects import build_object_key, put_bytes, s3_client
+from app.services.manuscript_objects import BUCKET_NAME, build_object_key, put_bytes, s3_client
 from app.services.manuscript_storage import (
     WORKSPACE_KEY,
     _workspace_for_owner,
@@ -80,7 +80,7 @@ def export_current_version(
     payload = renderer(
         title=workspace.get("title", "Untitled manuscript"),
         sections=sections,
-        project_title=workspace.get("title", ""),
+        project_title="",
         article_type=workspace.get("article_type", ""),
         generated_at=generated_at,
     )
@@ -96,7 +96,7 @@ def export_current_version(
     try:
         download_url = objects.generate_presigned_url(
             "get_object",
-            Params={"Bucket": __import__("app.services.manuscript_objects", fromlist=["BUCKET_NAME"]).BUCKET_NAME, "Key": key},
+            Params={"Bucket": BUCKET_NAME, "Key": key},
             ExpiresIn=900,
         )
     except Exception as exc:
