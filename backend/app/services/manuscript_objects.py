@@ -20,11 +20,16 @@ from fastapi import HTTPException
 
 BUCKET_NAME = os.getenv("MANUSCRIPTS_BUCKET_NAME", "").strip()
 s3_client = boto3.client("s3")
-_SEGMENT = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_SEGMENT = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$")
 
 
 def _safe_segment(value: str, label: str) -> str:
-    if not isinstance(value, str) or not _SEGMENT.fullmatch(value):
+    if (
+        not isinstance(value, str)
+        or not _SEGMENT.fullmatch(value)
+        or ".." in value
+        or value.endswith(".")
+    ):
         raise ValueError(f"Invalid {label}.")
     return value
 
