@@ -388,3 +388,29 @@ The cleanup service must be constrained to manuscript resources and must never d
 - Expiry cleanup removes manuscript records and every associated S3 object version while preserving all source project modules and screening records.
 - Cleanup can be safely retried without deleting unrelated data.
 - Staging tests verify the expiry and cleanup workflow before any production consideration.
+
+
+## 15. Staging infrastructure inspection results
+
+Read-only inspection of the staging environment on 19 November 2026 established the following:
+
+| Resource | Observed configuration | Design implication |
+| --- | --- | --- |
+| `onyitech-research-projects-staging` | ACTIVE, PAY_PER_REQUEST, partition key `id`, no sort key or GSI | Retain for existing project metadata and module storage; do not place the full manuscript history in one project item. |
+| `onyitech-study-screening-staging` | ACTIVE, PAY_PER_REQUEST, partition key `project_id`, sort key `record_key` | Existing dedicated-record pattern is a suitable model for manuscript records. |
+| `onyitech-integrity-submissions-staging` | ACTIVE, PAY_PER_REQUEST, partition key `owner_sub`, sort key `submission_id`, GSI `cleanup-index` on `cleanup_status` / `cleanup_at` | Keep separate; its cleanup-oriented schema is not the manuscript domain. |
+| Integrity S3 bucket `onyitech-research-integrity-staging-530751149539` | AES256 default encryption; all four S3 Block Public Access settings enabled; bucket versioning returned no enabled status; no bucket lifecycle configuration | Do not reuse as the manuscript bucket. |
+
+The staging Lambda role `onyitech-research-api-staging-role` has DynamoDB access to the project and integrity tables. Its integrity S3 object permissions are restricted to `arn:aws:s3:::onyitech-research-integrity-staging-530751149539/submissions/*` for GetObject, PutObject and DeleteObject. The role has separate access to the Study Screening table and Bedrock invocation. No manuscript-specific table or bucket permissions currently exist.
+
+### 15.1 Proposed staging resources (not yet provisioned)
+
+- DynamoDB table: `onyitech-manuscripts-staging`, PAY_PER_REQUEST, partition key `project_id` (String), sort key `record_key` (String).
+- S3 bucket: `onyitech-manuscripts-staging-530751149539`, private, Block Public Access enabled, server-side encryption enabled. Configure retention/expiration only for this dedicated manuscript bucket and ensure cleanup removes object versions if versioning is enabled.
+- Add narrowly scoped manuscript table and bucket permissions to the staging Lambda role only after resource creation is explicitly approved.
+
+These names and settings are design proposals; the resources and IAM permissions have **not** been created or changed. The production environment remains untouched.
+
+### 15.2 Staging deployment workflow
+
+The current `.github/workflows/deploy-staging-lambda.yml` deploys to `onyitech-research-api-staging` for `main` and a fixed list of feature branches. The branch `feat/research-to-manuscript-engine` is not currently on that list. Before backend implementation is pushed for this feature, update the staging workflow on the feature branch so its backend changes can be deployed to the isolated staging Lambda. Do not add this feature to any production deployment workflow. A workflow change that triggers a staging deployment should be coordinated with the implementation so an unneeded baseline redeployment is avoided.
