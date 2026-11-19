@@ -146,6 +146,8 @@ def render_pdf(
         story.append(Paragraph(escape(project_title.strip()), meta_style))
     if article_type.strip():
         story.append(Paragraph(escape(article_type.replace("_", " ").title()), meta_style))
+    if any(item.get("status") != "approved" for item in sections):
+        story.append(Paragraph("WORKING DRAFT — one or more sections are not approved", meta_style))
     story.append(Paragraph(
         "Generated " + escape(generated.astimezone(timezone.utc).isoformat()),
         meta_style,
