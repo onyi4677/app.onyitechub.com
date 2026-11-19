@@ -7,3 +7,6 @@ projects_table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
 STUDY_SCREENING_TABLE_NAME = os.getenv("STUDY_SCREENING_TABLE_NAME", "").strip()
 study_screening_table = dynamodb.Table(STUDY_SCREENING_TABLE_NAME) if STUDY_SCREENING_TABLE_NAME else None
+
+MANUSCRIPTS_TABLE_NAME = os.getenv("MANUSCRIPTS_TABLE_NAME", "").strip()
+manuscript_table = dynamodb.Table(MANUSCRIPTS_TABLE_NAME) if MANUSCRIPTS_TABLE_NAME else None
