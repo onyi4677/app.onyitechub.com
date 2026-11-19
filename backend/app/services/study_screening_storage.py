@@ -1,5 +1,6 @@
 import json
 import logging
+from decimal import Decimal
 from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Any
@@ -23,9 +24,23 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _json_size_default(value: Any) -> str:
+    # boto3's DynamoDB resource layer returns numeric attributes as Decimal.
+    # Stringifying Decimal values here is only for conservative size estimation;
+    # the original Decimal objects are retained in the item sent to DynamoDB.
+    if isinstance(value, Decimal):
+        return str(value)
+    raise TypeError(f"Unsupported value for JSON size estimation: {type(value).__name__}")
+
+
 def _check_item_size(value: Any, label: str) -> None:
     try:
-        size = len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        size = len(json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=_json_size_default,
+        ).encode("utf-8"))
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=f"Study Screening {label} contains data that cannot be stored.") from exc
     if size > MAX_ITEM_BYTES:
