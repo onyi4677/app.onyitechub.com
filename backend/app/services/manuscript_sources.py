@@ -21,6 +21,7 @@ SOURCE_MODULE_KEYS = (
     "study_screening",
     "references_citations",
     "methodology",
+    "instruments",
 )
 
 COUNT_FIELDS = (
