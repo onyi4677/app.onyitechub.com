@@ -61,6 +61,40 @@ def _manuscript_table():
     return manuscript_table
 
 
+def _legacy_snapshot_key_for_project(project_id: str, snapshot_id: str) -> str | None:
+    """Resolve a pre-migration snapshot through the version that references it."""
+    table = _manuscript_table()
+    try:
+        response = table.query(
+            KeyConditionExpression=Key("project_id").eq(project_id)
+            & Key("record_key").begins_with("VERSION#"),
+            ConsistentRead=True,
+        )
+        while True:
+            for item in response.get("Items", []):
+                if (
+                    item.get("source_snapshot_id") == snapshot_id
+                    and item.get("manuscript_id")
+                ):
+                    return build_object_key(
+                        project_id,
+                        item["manuscript_id"],
+                        "snapshots",
+                        f"{snapshot_id}.json",
+                    )
+            if not response.get("LastEvaluatedKey"):
+                break
+            response = table.query(
+                KeyConditionExpression=Key("project_id").eq(project_id)
+                & Key("record_key").begins_with("VERSION#"),
+                ExclusiveStartKey=response["LastEvaluatedKey"],
+                ConsistentRead=True,
+            )
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to resolve legacy source snapshot.") from exc
+    return None
+
+
 @router.post("/projects/{project_id}/manuscript/workspace")
 def create_project_manuscript_workspace(
     project_id: str,
@@ -131,10 +165,14 @@ def get_manuscript_source_snapshot(
         # Backward compatibility for snapshots captured before the durable
         # project-scoped key was introduced. New snapshots never use this path.
         try:
-            legacy_workspace = _workspace_or_503(project_id, user["sub"])
-            legacy_key = build_object_key(
-                project_id, legacy_workspace["manuscript_id"], "snapshots", f"{snapshot_id}.json"
-            )
+            legacy_key = _legacy_snapshot_key_for_project(project_id, snapshot_id)
+            if legacy_key is None:
+                # A snapshot may have been collected before a version was created.
+                # Retain the original workspace-owner fallback for that case.
+                legacy_workspace = _workspace_or_503(project_id, user["sub"])
+                legacy_key = build_object_key(
+                    project_id, legacy_workspace["manuscript_id"], "snapshots", f"{snapshot_id}.json"
+                )
             response = s3_client.get_object(Bucket=BUCKET_NAME, Key=legacy_key)
             payload = json.loads(response["Body"].read().decode("utf-8"))
         except ClientError as legacy_exc:
