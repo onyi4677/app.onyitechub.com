@@ -6,7 +6,7 @@ from typing import Any
 
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.auth import require_user
@@ -19,6 +19,7 @@ from app.services.manuscript_objects import (
     s3_client,
 )
 from app.services.manuscript_sources import collect_project_sources
+from app.services.manuscript_backup_import import import_project_backup
 from app.services.manuscript_storage import (
     WORKSPACE_KEY,
     create_workspace,
@@ -221,3 +222,19 @@ def save_project_manuscript_section(
         content=payload.content,
         status=payload.status,
     )
+
+
+
+@router.post("/projects/{project_id}/modules/backup/import")
+async def import_project_module_backup(
+    project_id: str,
+    request: Request,
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
+    """Import a verified project backup ZIP into an empty project owned by the caller."""
+    _require_project_access(project_id, user)
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type not in {"application/zip", "application/octet-stream"}:
+        raise HTTPException(status_code=415, detail="Upload the Project Backup ZIP file.")
+    archive_bytes = await request.body()
+    return import_project_backup(project_id, user["sub"], archive_bytes)
