@@ -10,6 +10,7 @@ import {
   createManuscriptWorkspace,
   getManuscriptWorkspace,
   getCurrentManuscript,
+  getManuscriptSourceSnapshot,
   saveManuscriptSection,
   getProject,
 } from "../../../../lib/api";
@@ -18,6 +19,7 @@ import type {
   ManuscriptWorkspace,
   ManuscriptSection,
   CurrentManuscript,
+  ManuscriptSourceSnapshot,
   Project,
 } from "../../../../lib/api";
 
@@ -33,6 +35,7 @@ export default function ManuscriptDevelopmentPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [currentManuscript, setCurrentManuscript] = useState<CurrentManuscript | null>(null);
+  const [sourceSnapshot, setSourceSnapshot] = useState<ManuscriptSourceSnapshot | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [sectionDraft, setSectionDraft] = useState<ManuscriptSection | null>(null);
   const [sectionSaving, setSectionSaving] = useState(false);
@@ -94,6 +97,10 @@ export default function ManuscriptDevelopmentPage() {
       if (!result.version) {
         throw new Error("There is no manuscript version to open yet.");
       }
+      // Load the immutable evidence snapshot linked to this exact version.
+      // Do not rebuild it from live modules: the version must retain its original evidence state.
+      const linkedSnapshot = await getManuscriptSourceSnapshot(id, result.version.source_snapshot_id);
+      setSourceSnapshot(linkedSnapshot);
       const defaults: ManuscriptSection[] = [
         { section_id: "title-page", title: "Title page", order: 0, content: "", status: "empty" },
         { section_id: "abstract", title: "Abstract", order: 1, content: "", status: "empty" },
@@ -269,6 +276,35 @@ export default function ManuscriptDevelopmentPage() {
             <button className="button primary" type="button" onClick={handleOpenVersion} disabled={busy}>
               {busy ? "Opening..." : "Open manuscript version"}
             </button>
+          </section>
+        )}
+
+        {sourceSnapshot && (
+          <section className="card form">
+            <h3>Saved research evidence linked to this version</h3>
+            <p><strong>Snapshot ID:</strong> {sourceSnapshot.source_snapshot_id}</p>
+            <p><strong>Captured:</strong> {new Date(sourceSnapshot.captured_at).toLocaleString()}</p>
+            <p><strong>Project:</strong> {sourceSnapshot.project?.title || project.title}</p>
+            <p><strong>Canonical sources:</strong> {sourceSnapshot.canonical_sources?.length ?? 0}</p>
+            <p className="muted">This is the immutable snapshot captured for this manuscript version. The views below read the saved module contents; they do not refresh or modify the original research modules.</p>
+            {Object.entries(sourceSnapshot.modules || {}).map(([key, module]) => (
+              <details key={key} className="form">
+                <summary>
+                  <strong>{key.replaceAll("_", " ")}</strong>
+                  {" · "}{module.status}
+                  {" · "}{Object.entries(module.record_counts || {}).map(([field, count]) => `${field}: ${count}`).join(" · ") || "No list records"}
+                </summary>
+                <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 520, overflow: "auto", padding: 12, background: "var(--surface-muted, #f6f7f8)", borderRadius: 8 }}>
+                  {JSON.stringify(module.content ?? {}, null, 2)}
+                </pre>
+              </details>
+            ))}
+            <details>
+              <summary><strong>Canonical bibliography sources</strong> ({sourceSnapshot.canonical_sources?.length ?? 0})</summary>
+              <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 520, overflow: "auto", padding: 12 }}>
+                {JSON.stringify(sourceSnapshot.canonical_sources ?? [], null, 2)}
+              </pre>
+            </details>
           </section>
         )}
 
