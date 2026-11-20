@@ -115,6 +115,27 @@ export async function collectManuscriptSources(id: string) {
   );
 }
 
+export type ManuscriptSourceSnapshot = {
+  source_snapshot_id: string;
+  snapshot_schema_version: number;
+  project_id: string;
+  project: { title?: string | null; question?: string | null; discipline?: string | null };
+  captured_at: string;
+  modules: Record<string, {
+    status: string;
+    record_counts: Record<string, number>;
+    updated_at?: string | null;
+    content: Record<string, unknown>;
+  }>;
+  canonical_sources: CanonicalResearchSource[];
+};
+
+export async function getManuscriptSourceSnapshot(id: string, snapshotId: string) {
+  return apiRequest<ManuscriptSourceSnapshot>(
+    `/api/projects/${encodeURIComponent(id)}/manuscript/sources/${encodeURIComponent(snapshotId)}`
+  );
+}
+
 export async function createManuscriptVersion(
   id: string,
   snapshotId: string,
