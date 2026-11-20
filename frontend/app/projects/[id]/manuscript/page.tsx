@@ -105,7 +105,8 @@ export default function ManuscriptDevelopmentPage() {
         { section_id: "conclusion", title: "Conclusion", order: 7, content: "", status: "empty" },
         { section_id: "references", title: "References", order: 8, content: "", status: "empty" },
       ];
-      const savedById = new Map(result.sections.map((section) => [section.section_id, section]));
+      const savedById = new Map<string, ManuscriptSection>();
+      result.sections.forEach((section) => savedById.set(section.section_id, section));
       const sections = defaults.map((section) => savedById.get(section.section_id) || section);
       for (const saved of result.sections) {
         if (!sections.some((section) => section.section_id === saved.section_id)) sections.push(saved);
