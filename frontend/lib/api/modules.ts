@@ -66,3 +66,76 @@ export async function importProjectBackup(id: string, file: File) {
     }
   );
 }
+
+
+export type ManuscriptWorkspace = {
+  project_id: string;
+  manuscript_id: string;
+  title: string;
+  article_type: string;
+  status: string;
+  created_at: number;
+  expires_at_iso: string;
+  current_version_id?: string;
+};
+
+export type ManuscriptSourceCollection = {
+  source_snapshot_id: string;
+  captured_at: string;
+  snapshot_key: string;
+  modules: Record<string, {
+    status: string;
+    record_counts: Record<string, number>;
+    updated_at?: string | null;
+  }>;
+  canonical_source_count: number;
+};
+
+export async function createManuscriptWorkspace(
+  id: string,
+  title: string,
+  articleType: string
+) {
+  return apiRequest<ManuscriptWorkspace>(
+    `/api/projects/${encodeURIComponent(id)}/manuscript/workspace`,
+    { method: "POST", body: JSON.stringify({ title, article_type: articleType }) }
+  );
+}
+
+export async function getManuscriptWorkspace(id: string) {
+  return apiRequest<ManuscriptWorkspace>(
+    `/api/projects/${encodeURIComponent(id)}/manuscript/workspace`
+  );
+}
+
+export async function collectManuscriptSources(id: string) {
+  return apiRequest<ManuscriptSourceCollection>(
+    `/api/projects/${encodeURIComponent(id)}/manuscript/sources/collect`,
+    { method: "POST" }
+  );
+}
+
+export async function createManuscriptVersion(
+  id: string,
+  snapshotId: string,
+  templateId: string,
+  templateVersion = 1
+) {
+  return apiRequest<{
+    version_id: string;
+    version_number: number;
+    source_snapshot_id: string;
+    template_id: string;
+    status: string;
+  }>(
+    `/api/projects/${encodeURIComponent(id)}/manuscript/versions`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        source_snapshot_id: snapshotId,
+        template_id: templateId,
+        template_version: templateVersion,
+      }),
+    }
+  );
+}
