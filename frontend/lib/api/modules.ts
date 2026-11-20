@@ -47,3 +47,22 @@ export async function getProjectResearchSources(id: string) {
     `/api/projects/${encodeURIComponent(id)}/research-sources`
   );
 }
+
+
+export async function importProjectBackup(id: string, file: File) {
+  return apiRequest<{
+    status: string;
+    source_project_id: string;
+    destination_project_id: string;
+    modules_imported: string[];
+    record_counts: Record<string, Record<string, number>>;
+    checksums_verified: number;
+  }>(
+    `/api/projects/${encodeURIComponent(id)}/modules/backup/import`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/zip" },
+      body: file,
+    }
+  );
+}
