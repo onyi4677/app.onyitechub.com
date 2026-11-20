@@ -50,6 +50,14 @@ class ManuscriptObjectStorageTests(unittest.TestCase):
             "projects/project-1/manuscripts/manuscript-1/snapshots/snapshot.json",
         )
 
+    def test_builds_durable_project_scoped_source_snapshot_keys(self):
+        key = manuscript_objects.build_source_snapshot_key("project-1", "snapshot-1")
+        self.assertEqual(key, "projects/project-1/source-snapshots/snapshot-1.json")
+
+    def test_durable_snapshot_key_rejects_path_traversal(self):
+        with self.assertRaises(ValueError):
+            manuscript_objects.build_source_snapshot_key("project-1", "../snapshot")
+
     def test_rejects_path_traversal_and_unknown_categories(self):
         with self.assertRaises(ValueError):
             manuscript_objects.manuscript_prefix("../project", "manuscript-1")
