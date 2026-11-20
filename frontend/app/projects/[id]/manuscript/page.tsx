@@ -80,6 +80,7 @@ export default function ManuscriptDevelopmentPage() {
       const result = await collectManuscriptSources(id);
       setCollection(result);
       setVersion(null);
+      setSourceSnapshot(null);
       setMessage("Research source snapshot collected. Original research modules were read only.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to collect research sources.");
@@ -93,6 +94,7 @@ export default function ManuscriptDevelopmentPage() {
     setSectionError("");
     setSectionMessage("");
     try {
+      setSourceSnapshot(null);
       const result = await getCurrentManuscript(id);
       if (!result.version) {
         throw new Error("There is no manuscript version to open yet.");
