@@ -40,6 +40,13 @@ def manuscript_prefix(project_id: str, manuscript_id: str) -> str:
     return f"projects/{project}/manuscripts/{manuscript}/"
 
 
+def build_source_snapshot_key(project_id: str, snapshot_id: str) -> str:
+    """Build a durable project-scoped key outside temporary manuscript cleanup."""
+    project = _safe_segment(project_id, "project identifier")
+    snapshot = _safe_segment(snapshot_id, "source snapshot identifier")
+    return f"projects/{project}/source-snapshots/{snapshot}.json"
+
+
 def build_object_key(
     project_id: str,
     manuscript_id: str,
