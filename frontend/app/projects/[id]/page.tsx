@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import Nav from "../../../components/nav";
 import ModuleCard from "../../../components/workspace/module-card";
-import { getModules, getProject, getProjectModule, updateProject } from "../../../lib/api";
+import { getModules, getProject, getProjectModule, importProjectBackup, updateProject } from "../../../lib/api";
 import type { Project, ResearchModule } from "../../../lib/types";
 
 export default function ProjectPage() {
@@ -23,6 +23,10 @@ export default function ProjectPage() {
   const [titleDraft, setTitleDraft] = useState("");
   const [questionDraft, setQuestionDraft] = useState("");
   const [disciplineDraft, setDisciplineDraft] = useState("");
+  const [backupFile, setBackupFile] = useState<File | null>(null);
+  const [importingBackup, setImportingBackup] = useState(false);
+  const [backupImportError, setBackupImportError] = useState("");
+  const [backupImportMessage, setBackupImportMessage] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -61,6 +65,35 @@ export default function ProjectPage() {
     setSaveError("");
     setSaveMessage("");
     setEditing(true);
+  }
+
+  async function handleBackupImport() {
+    setBackupImportError("");
+    setBackupImportMessage("");
+    if (!backupFile) {
+      setBackupImportError("Choose the Project_001_Backup.zip file first.");
+      return;
+    }
+    if (!backupFile.name.toLowerCase().endsWith(".zip")) {
+      setBackupImportError("Please choose the verified Project Backup ZIP file.");
+      return;
+    }
+    const confirmed = window.confirm(
+      "Import the production backup into this staging project? This is allowed only when the destination modules are empty."
+    );
+    if (!confirmed) return;
+    setImportingBackup(true);
+    try {
+      const result = await importProjectBackup(id, backupFile);
+      setBackupImportMessage(
+        `Import successful. Imported: ${result.modules_imported.join(", ")}. Refreshing the project...`
+      );
+      window.location.reload();
+    } catch (err) {
+      setBackupImportError(err instanceof Error ? err.message : "Project backup import failed.");
+    } finally {
+      setImportingBackup(false);
+    }
   }
 
   async function handleProjectUpdate(event: FormEvent<HTMLFormElement>) {
@@ -126,6 +159,27 @@ export default function ProjectPage() {
         <h3>Core research problem</h3>
         <p>{project.question}</p>
       </div>
+
+      <section className="card form" style={{ marginTop: 28 }}>
+        <h3>Import a project backup</h3>
+        <p className="muted">Restore a verified JSON backup into this project. The import checks the archive checksums and stops if this project already contains module data. Project identity and ownership are preserved.</p>
+        <label htmlFor="project-backup-file">Project Backup ZIP</label>
+        <input
+          id="project-backup-file"
+          type="file"
+          accept=".zip,application/zip"
+          onChange={(event) => setBackupFile(event.target.files?.[0] || null)}
+          disabled={importingBackup}
+        />
+        {backupImportError && <div className="notice">{backupImportError}</div>}
+        {backupImportMessage && <div className="notice">{backupImportMessage}</div>}
+        <div className="actions">
+          <button className="button primary" type="button" onClick={handleBackupImport} disabled={importingBackup || !backupFile}>
+            {importingBackup ? "Verifying and importing..." : "Verify and import backup"}
+          </button>
+        </div>
+        <p className="muted">Use only a backup you trust. Maximum upload size: 5 MB. This tool does not overwrite existing project modules.</p>
+      </section>
 
       <section className="pagehead" style={{ marginTop: 36 }}>
         <div><div className="eyebrow">Workspace</div><h3>Research lifecycle</h3><p className="muted">Develop the study as connected research records. Each module has its own workspace and backend persistence.</p></div>
