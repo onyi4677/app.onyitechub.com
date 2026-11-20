@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import zipfile
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -152,7 +153,7 @@ def import_project_backup(project_id: str, owner_sub: str, archive_bytes: bytes)
                 ":modules": project_modules,
                 ":empty": {},
                 ":owner": owner_sub,
-                ":updated": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+                ":updated": datetime.now(timezone.utc).isoformat(),
             },
         )
     except HTTPException:
