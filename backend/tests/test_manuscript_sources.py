@@ -33,6 +33,7 @@ class ManuscriptSourceCollectorTests(unittest.TestCase):
                 "in_text_citations": [{"citation_id": "cit-1", "reference_ids": ["ref-1"]}],
             },
             "methodology": {"review_type": "scoping"},
+            "instruments": {"pathways": {"primary_data": {"instrument_versions": []}}},
         }
 
     def test_collects_all_source_modules_through_loader(self):
@@ -46,7 +47,7 @@ class ManuscriptSourceCollectorTests(unittest.TestCase):
 
         self.assertEqual([key for _, key in calls], [
             "research_foundation", "literature_evidence", "study_screening",
-            "references_citations", "methodology",
+            "references_citations", "methodology", "instruments",
         ])
         self.assertEqual(snapshot["modules"]["study_screening"]["record_counts"]["records"], 1)
         self.assertEqual(snapshot["modules"]["literature_evidence"]["record_counts"]["sources"], 1)
