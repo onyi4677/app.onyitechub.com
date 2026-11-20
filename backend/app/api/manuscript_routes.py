@@ -15,6 +15,7 @@ from app.db import manuscript_table
 from app.services.manuscript_objects import (
     BUCKET_NAME,
     build_object_key,
+    build_source_snapshot_key,
     put_json,
     s3_client,
 )
@@ -98,9 +99,7 @@ def collect_manuscript_sources(
     workspace = _workspace_or_503(project_id, user["sub"])
     snapshot = collect_project_sources(project_id, project)
     snapshot_id = snapshot["source_snapshot_id"]
-    key = build_object_key(
-        project_id, workspace["manuscript_id"], "snapshots", f"{snapshot_id}.json"
-    )
+    key = build_source_snapshot_key(project_id, snapshot_id)
     put_json(key, snapshot)
     return {
         "source_snapshot_id": snapshot_id,
@@ -118,10 +117,9 @@ def get_manuscript_source_snapshot(
     user: dict[str, Any] = Depends(require_user),
 ) -> dict[str, Any]:
     _require_project_access(project_id, user)
-    workspace = _workspace_or_503(project_id, user["sub"])
-    key = build_object_key(
-        project_id, workspace["manuscript_id"], "snapshots", f"{snapshot_id}.json"
-    )
+    # Project access is the authorization boundary for read-only evidence.
+    # The snapshot is project-scoped and is not coupled to a temporary workspace.
+    key = build_source_snapshot_key(project_id, snapshot_id)
     try:
         response = s3_client.get_object(Bucket=BUCKET_NAME, Key=key)
         payload = json.loads(response["Body"].read().decode("utf-8"))
@@ -144,12 +142,7 @@ def create_project_manuscript_version(
 ) -> dict[str, Any]:
     _require_project_access(project_id, user)
     workspace = _workspace_or_503(project_id, user["sub"])
-    key = build_object_key(
-        project_id,
-        workspace["manuscript_id"],
-        "snapshots",
-        f"{payload.source_snapshot_id}.json",
-    )
+    key = build_source_snapshot_key(project_id, payload.source_snapshot_id)
     try:
         s3_client.head_object(Bucket=BUCKET_NAME, Key=key)
     except ClientError as exc:
