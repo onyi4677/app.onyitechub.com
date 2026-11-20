@@ -120,13 +120,29 @@ def get_manuscript_source_snapshot(
     # Project access is the authorization boundary for read-only evidence.
     # The snapshot is project-scoped and is not coupled to a temporary workspace.
     key = build_source_snapshot_key(project_id, snapshot_id)
+    payload = None
     try:
         response = s3_client.get_object(Bucket=BUCKET_NAME, Key=key)
         payload = json.loads(response["Body"].read().decode("utf-8"))
     except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404", "NotFound"}:
-            raise HTTPException(status_code=404, detail="Source snapshot not found.") from exc
-        raise HTTPException(status_code=500, detail="Unable to retrieve source snapshot.") from exc
+        code = exc.response.get("Error", {}).get("Code")
+        if code not in {"NoSuchKey", "404", "NotFound"}:
+            raise HTTPException(status_code=500, detail="Unable to retrieve source snapshot.") from exc
+        # Backward compatibility for snapshots captured before the durable
+        # project-scoped key was introduced. New snapshots never use this path.
+        try:
+            legacy_workspace = _workspace_or_503(project_id, user["sub"])
+            legacy_key = build_object_key(
+                project_id, legacy_workspace["manuscript_id"], "snapshots", f"{snapshot_id}.json"
+            )
+            response = s3_client.get_object(Bucket=BUCKET_NAME, Key=legacy_key)
+            payload = json.loads(response["Body"].read().decode("utf-8"))
+        except ClientError as legacy_exc:
+            if legacy_exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404", "NotFound"}:
+                raise HTTPException(status_code=404, detail="Source snapshot not found.") from legacy_exc
+            raise HTTPException(status_code=500, detail="Unable to retrieve source snapshot.") from legacy_exc
+        except (KeyError, ValueError, UnicodeDecodeError) as legacy_exc:
+            raise HTTPException(status_code=500, detail="Stored source snapshot is invalid.") from legacy_exc
     except (KeyError, ValueError, UnicodeDecodeError) as exc:
         raise HTTPException(status_code=500, detail="Stored source snapshot is invalid.") from exc
     if payload.get("source_snapshot_id") != snapshot_id:
@@ -146,9 +162,18 @@ def create_project_manuscript_version(
     try:
         s3_client.head_object(Bucket=BUCKET_NAME, Key=key)
     except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404", "NotFound"}:
-            raise HTTPException(status_code=404, detail="The source snapshot does not exist.") from exc
-        raise HTTPException(status_code=500, detail="Unable to verify source snapshot.") from exc
+        if exc.response.get("Error", {}).get("Code") not in {"NoSuchKey", "404", "NotFound"}:
+            raise HTTPException(status_code=500, detail="Unable to verify source snapshot.") from exc
+        # Allow a pre-existing workspace-scoped snapshot to be versioned.
+        legacy_key = build_object_key(
+            project_id, workspace["manuscript_id"], "snapshots", f"{payload.source_snapshot_id}.json"
+        )
+        try:
+            s3_client.head_object(Bucket=BUCKET_NAME, Key=legacy_key)
+        except ClientError as legacy_exc:
+            if legacy_exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404", "NotFound"}:
+                raise HTTPException(status_code=404, detail="The source snapshot does not exist.") from legacy_exc
+            raise HTTPException(status_code=500, detail="Unable to verify source snapshot.") from legacy_exc
     return create_version(
         project_id,
         user["sub"],
