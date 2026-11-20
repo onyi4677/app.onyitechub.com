@@ -139,3 +139,51 @@ export async function createManuscriptVersion(
     }
   );
 }
+
+
+export type ManuscriptSection = {
+  section_id: string;
+  title: string;
+  order: number;
+  content: string;
+  status: "empty" | "needs_input" | "draft" | "in_review" | "approved";
+  updated_at?: number;
+};
+
+export type CurrentManuscript = {
+  workspace: ManuscriptWorkspace;
+  version: {
+    version_id: string;
+    version_number: number;
+    source_snapshot_id: string;
+    template_id: string;
+    template_version: number;
+    status: string;
+  } | null;
+  sections: ManuscriptSection[];
+};
+
+export async function getCurrentManuscript(id: string) {
+  return apiRequest<CurrentManuscript>(
+    `/api/projects/${encodeURIComponent(id)}/manuscript/current`
+  );
+}
+
+export async function saveManuscriptSection(
+  id: string,
+  versionId: string,
+  section: ManuscriptSection
+) {
+  return apiRequest<ManuscriptSection>(
+    `/api/projects/${encodeURIComponent(id)}/manuscript/versions/${encodeURIComponent(versionId)}/sections/${encodeURIComponent(section.section_id)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        title: section.title,
+        order: section.order,
+        content: section.content,
+        status: section.status,
+      }),
+    }
+  );
+}
