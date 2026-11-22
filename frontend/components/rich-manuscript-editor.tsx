@@ -75,6 +75,45 @@ function sanitizeHtml(html: string): string {
   return clean.innerHTML;
 }
 
+function plainTextToHtml(value: string): string {
+  const root = document.createElement("div");
+  const lines = value.replace(/\\r\\n?/g, "\\n").split("\\n");
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+    if (line.includes("\\t")) {
+      const table = document.createElement("table");
+      const body = document.createElement("tbody");
+      while (index < lines.length && lines[index].includes("\\t")) {
+        const row = document.createElement("tr");
+        lines[index].split("\\t").forEach((cell, cellIndex) => {
+          const element = document.createElement(index === 0 && cellIndex >= 0 ? "td" : "td");
+          element.textContent = cell.trim();
+          row.appendChild(element);
+        });
+        body.appendChild(row);
+        index += 1;
+      }
+      table.appendChild(body);
+      root.appendChild(table);
+      continue;
+    }
+    const paragraphLines: string[] = [];
+    while (index < lines.length && lines[index].trim() && !lines[index].includes("\\t")) {
+      paragraphLines.push(lines[index]);
+      index += 1;
+    }
+    const paragraph = document.createElement("p");
+    paragraph.textContent = paragraphLines.join(" ");
+    root.appendChild(paragraph);
+  }
+  return root.innerHTML;
+}
+
 export default function RichManuscriptEditor({
   value,
   onChange,
@@ -91,7 +130,7 @@ export default function RichManuscriptEditor({
     if (/<\s*(?:table|p|div|h[1-4])\b/i.test(value)) {
       editor.innerHTML = sanitizeHtml(value);
     } else {
-      editor.textContent = value;
+      editor.innerHTML = plainTextToHtml(value);
     }
     lastEmitted.current = value;
   }, [value]);
