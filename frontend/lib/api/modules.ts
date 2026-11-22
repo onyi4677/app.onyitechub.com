@@ -208,3 +208,27 @@ export async function saveManuscriptSection(
     }
   );
 }
+
+
+export type ManuscriptExportFormat = "docx" | "pdf";
+
+export type ManuscriptExportResult = {
+  status: "exported";
+  format: ManuscriptExportFormat;
+  version_id: string;
+  object_key: string;
+  download_url: string;
+  download_url_expires_in: number;
+  retention_phase: string;
+  expires_at?: string | null;
+};
+
+export async function exportManuscript(id: string, format: ManuscriptExportFormat) {
+  return apiRequest<ManuscriptExportResult>(
+    `/api/projects/${encodeURIComponent(id)}/manuscript/export`,
+    {
+      method: "POST",
+      body: JSON.stringify({ format }),
+    }
+  );
+}
