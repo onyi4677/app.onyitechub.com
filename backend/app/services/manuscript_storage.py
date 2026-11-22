@@ -273,7 +273,10 @@ def record_successful_export(
                 "cleanup_at = :expires, ttl = :expires, updated_at = :now "
                 "ADD successful_export_count :one"
             ),
-            ConditionExpression="owner_sub = :owner AND manuscript_id = :manuscript AND #status <> :expired",
+            ConditionExpression=(
+                "owner_sub = :owner AND manuscript_id = :manuscript "
+                "AND (attribute_not_exists(#status) OR #status <> :expired)"
+            ),
             ExpressionAttributeNames={"#status": "status"},
             ExpressionAttributeValues={
                 ":phase": "post_export",
@@ -290,6 +293,12 @@ def record_successful_export(
             ReturnValues="ALL_NEW",
         )
     except ClientError as exc:
+        error = exc.response.get("Error", {})
+        logger.error(
+            "Manuscript export retention update failed: code=%s message=%s",
+            error.get("Code", "Unknown"),
+            error.get("Message", "No AWS error message supplied"),
+        )
         raise HTTPException(status_code=409, detail="Unable to update manuscript retention after export.") from exc
     return response.get("Attributes", {})
 
