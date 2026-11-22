@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ClipboardEvent } from "react";
 
 type Props = {
   value: string;
@@ -108,7 +108,7 @@ export default function RichManuscriptEditor({
     onChange(next);
   }
 
-  function handlePaste(event: React.ClipboardEvent<HTMLDivElement>) {
+  function handlePaste(event: ClipboardEvent<HTMLDivElement>) {
     event.preventDefault();
     const html = event.clipboardData.getData("text/html");
     const plain = event.clipboardData.getData("text/plain");
