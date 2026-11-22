@@ -21,6 +21,7 @@ from app.services.manuscript_objects import (
 )
 from app.services.manuscript_sources import collect_project_sources
 from app.services.manuscript_backup_import import import_project_backup
+from app.services.manuscript_exports import export_current_version
 from app.services.manuscript_storage import (
     WORKSPACE_KEY,
     create_workspace,
@@ -49,6 +50,10 @@ class ManuscriptSectionSave(BaseModel):
     order: int = Field(ge=0)
     content: str = Field(max_length=250000)
     status: str = Field(default="draft", pattern=r"^(empty|needs_input|draft|in_review|approved)$")
+
+
+class ManuscriptExportRequest(BaseModel):
+    format: str = Field(pattern=r"^(docx|pdf)$")
 
 
 def _workspace_or_503(project_id: str, owner_sub: str) -> dict[str, Any]:
@@ -278,6 +283,17 @@ def save_project_manuscript_section(
         content=payload.content,
         status=payload.status,
     )
+
+
+@router.post("/projects/{project_id}/manuscript/export")
+def export_project_manuscript(
+    project_id: str,
+    payload: ManuscriptExportRequest,
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
+    """Export the saved current manuscript version as a private DOCX or PDF."""
+    _require_project_access(project_id, user)
+    return export_current_version(project_id, user["sub"], payload.format)
 
 
 
