@@ -126,7 +126,7 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         from pypdf import PdfReader
         pdf = PdfReader(BytesIO(render_pdf("Wide table", sections)))
         self.assertAlmostEqual(float(pdf.pages[0].mediabox.width), 841.89, places=1)
-        text = "\\n".join(page.extract_text() or "" for page in pdf.pages)
+        text = " ".join("\\n".join(page.extract_text() or "" for page in pdf.pages).split())
         self.assertIn("Ibrahim et al. (2023)", text)
         self.assertIn("Not a clinical diagnosis.", text)
 
