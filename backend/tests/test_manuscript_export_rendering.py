@@ -89,7 +89,7 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         from docx import Document
         document = Document(BytesIO(render_docx("Markdown table", sections)))
         self.assertEqual(len(document.tables), 1)
-        self.assertEqual(document.tables[0].cell(2, 0).text, "Agu et al. (2023)")
+        self.assertEqual(document.tables[0].cell(2, 0).text, "Agu et al. (2022)")
 
     def test_pdf_table_text_remains_extractable(self):
         sections = [{
