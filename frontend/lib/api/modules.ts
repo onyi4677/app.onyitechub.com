@@ -221,6 +221,7 @@ export type ManuscriptExportResult = {
   download_url_expires_in: number;
   retention_phase: string;
   expires_at?: string | null;
+  retention_warning?: string | null;
 };
 
 export async function exportManuscript(id: string, format: ManuscriptExportFormat) {
