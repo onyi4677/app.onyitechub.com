@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from typing import Any
 from uuid import uuid4
 
@@ -17,6 +18,9 @@ from app.services.manuscript_storage import (
     _workspace_for_owner,
     record_successful_export,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 MIME_TYPES = {
@@ -102,13 +106,24 @@ def export_current_version(
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Export was stored but a download link could not be created.") from exc
 
-    updated = record_successful_export(
-        project_id=project_id,
-        owner_sub=owner_sub,
-        export_format=fmt,
-        export_key=key,
-        now_epoch=int(generated_at.timestamp()),
-    )
+    retention_warning = None
+    try:
+        updated = record_successful_export(
+            project_id=project_id,
+            owner_sub=owner_sub,
+            export_format=fmt,
+            export_key=key,
+            now_epoch=int(generated_at.timestamp()),
+        )
+    except HTTPException:
+        # The S3 object and signed URL already exist. Do not turn a completed
+        # file into a failed download solely because the retention write failed.
+        # Keep the failure visible so retention can be investigated separately.
+        logger.exception("Manuscript export stored but retention update did not complete.")
+        updated = {}
+        retention_warning = (
+            "The export file is ready, but the workspace retention date was not updated."
+        )
     return {
         "status": "exported",
         "format": fmt,
@@ -116,6 +131,7 @@ def export_current_version(
         "object_key": key,
         "download_url": download_url,
         "download_url_expires_in": 900,
-        "retention_phase": updated.get("retention_phase", "post_export"),
+        "retention_phase": updated.get("retention_phase", "retention_pending"),
         "expires_at": updated.get("expires_at_iso"),
+        "retention_warning": retention_warning,
     }
