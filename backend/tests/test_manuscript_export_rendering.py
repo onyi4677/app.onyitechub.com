@@ -46,7 +46,7 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         self.assertTrue(data.startswith(b"%PDF-"))
         self.assertGreater(len(data), 500)
         from pypdf import PdfReader
-        pdf_text = "\\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(data)).pages)
+        pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(data)).pages)
         self.assertIn("WORKING DRAFT", pdf_text)
 
     def test_rejects_duplicate_or_invalid_section_ids(self):
@@ -84,7 +84,7 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
     def test_markdown_table_becomes_native_docx_table(self):
         sections = [{
             "section_id": "results", "title": "Results", "order": 1, "status": "draft",
-            "content": "| Study | Location |\\n|---|---|\\n| Ibrahim et al. (2023) | Yobe |\\n| Agu et al. (2022) | Taraba |",
+            "content": "| Study | Location |\n|---|---|\n| Ibrahim et al. (2023) | Yobe |\n| Agu et al. (2022) | Taraba |",
         }]
         from docx import Document
         document = Document(BytesIO(render_docx("Markdown table", sections)))
@@ -98,7 +98,7 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         }]
         from pypdf import PdfReader
         pdf = PdfReader(BytesIO(render_pdf("PDF table", sections)))
-        text = "\\n".join(page.extract_text() or "" for page in pdf.pages)
+        text = "\n".join(page.extract_text() or "" for page in pdf.pages)
         self.assertIn("Ibrahim et al. (2023)", text)
         self.assertIn("Yobe", text)
 
