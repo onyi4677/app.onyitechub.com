@@ -16,12 +16,13 @@ from typing import Any
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.section import WD_ORIENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
@@ -255,11 +256,20 @@ def render_docx(
     _validate(title, sections)
     generated = generated_at or datetime.now(timezone.utc)
     document = Document()
+    # Wide evidence tables need landscape pages to remain readable in Word.
+    has_wide_table = any(
+        block["type"] == "table" and len(block["rows"][0]) >= 4
+        for item in sections for block in _content_blocks(item.get("content", ""))
+        if block.get("rows")
+    )
     section = document.sections[0]
-    section.top_margin = Inches(0.8)
-    section.bottom_margin = Inches(0.8)
-    section.left_margin = Inches(0.75)
-    section.right_margin = Inches(0.75)
+    if has_wide_table:
+        section.orientation = WD_ORIENT.LANDSCAPE
+        section.page_width, section.page_height = section.page_height, section.page_width
+    section.top_margin = Inches(0.65)
+    section.bottom_margin = Inches(0.65)
+    section.left_margin = Inches(0.6)
+    section.right_margin = Inches(0.6)
 
     heading = document.add_heading(title.strip(), level=0)
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -301,7 +311,11 @@ def _pdf_table(rows: list[list[str]], available_width: float, body_style: Paragr
             Paragraph(("<b>" + escape(cell) + "</b>") if row_index == 0 else escape(cell).replace("\n", "<br/>"), body_style)
             for cell in row
         ])
-    widths = [available_width / columns] * columns
+    # Give the study column less space and distribute the remaining width
+    # across the narrative columns. This avoids five equally narrow columns.
+    weights = [1.0] + [2.0] * (columns - 1)
+    total_weight = sum(weights)
+    widths = [available_width * weight / total_weight for weight in weights]
     table = Table(data, colWidths=widths, repeatRows=1, hAlign="LEFT", splitByRow=1)
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#DCE6F1")),
@@ -328,9 +342,16 @@ def render_pdf(
     _validate(title, sections)
     generated = generated_at or datetime.now(timezone.utc)
     output = BytesIO()
+    has_wide_table = any(
+        block["type"] == "table" and len(block["rows"][0]) >= 4
+        for item in sections for block in _content_blocks(item.get("content", ""))
+        if block.get("rows")
+    )
+    page_size = landscape(A4) if has_wide_table else A4
+    margin = 12 * mm if has_wide_table else 17 * mm
     doc = SimpleDocTemplate(
-        output, pagesize=A4, rightMargin=17 * mm, leftMargin=17 * mm,
-        topMargin=18 * mm, bottomMargin=18 * mm, title=title.strip(),
+        output, pagesize=page_size, rightMargin=margin, leftMargin=margin,
+        topMargin=14 * mm, bottomMargin=14 * mm, title=title.strip(),
         author="Onyitech Research Workspace",
     )
     base = getSampleStyleSheet()
@@ -363,7 +384,7 @@ def render_pdf(
     ))
     story.append(PageBreak())
 
-    available_width = A4[0] - 34 * mm
+    available_width = page_size[0] - 2 * margin
     for item in _ordered_sections(sections):
         story.append(Paragraph(escape(item["title"].strip()), section_style))
         blocks = _content_blocks(item.get("content", ""))
