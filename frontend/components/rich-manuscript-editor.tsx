@@ -31,7 +31,7 @@ function cleanStyle(styleText: string): string {
     if (
       ALLOWED_STYLE.has(property) &&
       value &&
-      !/url\\s*\\(|expression\\s*\\(|javascript:|@import/i.test(value)
+      !/url\s*\(|expression\s*\(|javascript:|@import/i.test(value)
     ) {
       kept.push(`${property}: ${value}`);
     }
@@ -56,7 +56,7 @@ function copySafeNode(node: Node, target: Node): void {
   const clean = document.createElement(tag.toLowerCase());
   for (const attribute of ["colspan", "rowspan", "scope"]) {
     const value = node.getAttribute(attribute);
-    if (value && /^\\d{1,3}$/.test(value) && attribute !== "scope") {
+    if (value && /^\d{1,3}$/.test(value) && attribute !== "scope") {
       clean.setAttribute(attribute, value);
     } else if (value && attribute === "scope" && ["row", "col", "rowgroup", "colgroup"].includes(value)) {
       clean.setAttribute(attribute, value);
@@ -88,7 +88,7 @@ export default function RichManuscriptEditor({
     const editor = editorRef.current;
     if (!editor || value === lastEmitted.current) return;
     // Existing plain-text/Markdown sections remain readable; saved rich HTML is sanitised.
-    if (/<\\s*(?:table|p|div|h[1-4])\\b/i.test(value)) {
+    if (/<\s*(?:table|p|div|h[1-4])\\b/i.test(value)) {
       editor.innerHTML = sanitizeHtml(value);
     } else {
       editor.textContent = value;
