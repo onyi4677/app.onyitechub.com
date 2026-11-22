@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 from io import BytesIO
+from docx.shared import Inches
 from zipfile import ZipFile
 
 from app.services.manuscript_export_rendering import render_docx, render_pdf
@@ -90,6 +91,44 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         document = Document(BytesIO(render_docx("Markdown table", sections)))
         self.assertEqual(len(document.tables), 1)
         self.assertEqual(document.tables[0].cell(2, 0).text, "Agu et al. (2022)")
+
+
+    def test_tab_separated_five_column_table_becomes_landscape_native_docx_table(self):
+        content = (
+            "Study\tTrauma or psychological assessment\tPTSD-related findings\tOther reported findings\tInterpretation and limitations\n"
+            "Ibrahim et al. (2023)\tHarvard Trauma Questionnaire (HTQ)\t424 of 450 participants (94.2%) exceeded threshold.\t443 of 450 (98.4%) exceeded depression threshold.\tQuestionnaire estimates, not clinician-confirmed diagnoses.\n"
+            "Agu et al. (2022)\tNSESSS; DASS\tAuthors reported reduced PTSD symptoms after CBT.\t12 sessions over 13 weeks.\tGroup-specific counts require verification.\n"
+            "Note. Findings are extracted and are not pooled estimates."
+        )
+        sections = [{
+            "section_id": "results", "title": "Results", "order": 1,
+            "status": "draft", "content": content,
+        }]
+        from docx import Document
+        document = Document(BytesIO(render_docx("Table export", sections)))
+        self.assertEqual(len(document.tables), 1)
+        self.assertEqual(len(document.tables[0].columns), 5)
+        self.assertEqual(len(document.tables[0].rows), 3)
+        self.assertEqual(document.tables[0].cell(0, 0).text, "Study")
+        self.assertEqual(document.tables[0].cell(1, 0).text, "Ibrahim et al. (2023)")
+        self.assertEqual(document.sections[0].page_width, Inches(11))
+        self.assertIn("Note. Findings are extracted", "\\n".join(p.text for p in document.paragraphs))
+
+    def test_five_column_tab_table_uses_landscape_pdf_page(self):
+        content = (
+            "Study\tAssessment\tPTSD findings\tOther findings\tLimitations\n"
+            "Ibrahim et al. (2023)\tHTQ\tHigh symptom estimate.\tDepression symptoms.\tNot a clinical diagnosis."
+        )
+        sections = [{
+            "section_id": "results", "title": "Results", "order": 1,
+            "status": "draft", "content": content,
+        }]
+        from pypdf import PdfReader
+        pdf = PdfReader(BytesIO(render_pdf("Wide table", sections)))
+        self.assertEqual(float(pdf.pages[0].mediabox.width), 841.89)
+        text = "\\n".join(page.extract_text() or "" for page in pdf.pages)
+        self.assertIn("Ibrahim et al. (2023)", text)
+        self.assertIn("Not a clinical diagnosis.", text)
 
     def test_pdf_table_text_remains_extractable(self):
         sections = [{
