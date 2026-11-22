@@ -99,6 +99,48 @@ class ManuscriptExportServiceTests(unittest.TestCase):
             )
         record_export.assert_not_called()
 
+    @patch(
+        "app.services.manuscript_exports.record_successful_export",
+        side_effect=HTTPException(409, "retention write failed"),
+    )
+    @patch("app.services.manuscript_exports.put_bytes")
+    @patch("app.services.manuscript_exports._workspace_for_owner")
+    @patch("app.services.manuscript_exports.BUCKET_NAME", "private-test-bucket")
+    def test_retention_failure_does_not_hide_completed_download(
+        self, workspace_lookup, put_file, record_export
+    ):
+        workspace_lookup.return_value = {
+            "manuscript_id": "manuscript-1",
+            "current_version_id": "version-1",
+            "title": "A Scoping Review",
+            "article_type": "scoping_review",
+        }
+        result = manuscript_exports.export_current_version(
+            "project-1",
+            "owner-1",
+            "pdf",
+            table=FakeTable(),
+            storage_client=FakeS3(),
+            now=datetime(2026, 11, 19, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(result["status"], "exported")
+        self.assertEqual(result["retention_phase"], "retention_pending")
+        self.assertIsNotNone(result["retention_warning"])
+        self.assertEqual(result["download_url"], "https://example.invalid/download")
+        put_file.assert_called_once()
+        record_export.assert_called_once()
+
+    def test_export_route_is_registered(self):
+        from app.api.manuscript_routes import router
+
+        paths = {
+            (route.path, method)
+            for route in router.routes
+            for method in getattr(route, "methods", set())
+        }
+        self.assertIn(("/api/projects/{project_id}/manuscript/export", "POST"), paths)
+
 
 if __name__ == "__main__":
     unittest.main()
