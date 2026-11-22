@@ -88,7 +88,7 @@ export default function RichManuscriptEditor({
     const editor = editorRef.current;
     if (!editor || value === lastEmitted.current) return;
     // Existing plain-text/Markdown sections remain readable; saved rich HTML is sanitised.
-    if (/<\s*(?:table|p|div|h[1-4])\\b/i.test(value)) {
+    if (/<\s*(?:table|p|div|h[1-4])\b/i.test(value)) {
       editor.innerHTML = sanitizeHtml(value);
     } else {
       editor.textContent = value;
