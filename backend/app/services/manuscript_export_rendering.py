@@ -71,7 +71,7 @@ class _RichContentParser(HTMLParser):
     def _flush_text(self) -> None:
         text = "".join(self.text_parts).strip()
         if text:
-            self.blocks.append({"type": "text", "text": re.sub(r"\\s+", " ", text)})
+            self.blocks.append({"type": "text", "text": re.sub(r"\s+", " ", text)})
         self.text_parts = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -97,7 +97,7 @@ class _RichContentParser(HTMLParser):
         if self.in_table:
             if tag in {"td", "th"} and self.cell_parts is not None:
                 self.row = self.row if self.row is not None else []
-                self.row.append(re.sub(r"\\s+", " ", "".join(self.cell_parts)).strip())
+                self.row.append(re.sub(r"\s+", " ", "".join(self.cell_parts)).strip())
                 self.cell_parts = None
             elif tag == "tr" and self.row is not None:
                 if self.row:
@@ -151,7 +151,7 @@ def _is_separator_row(line: str) -> bool:
 def _content_blocks(content: str) -> list[dict[str, Any]]:
     """Convert stored content to text/table blocks without flattening grids."""
     value = content.replace("\r\n", "\n").replace("\r", "\n")
-    if re.search(r"<\\s*(?:table|p|div|h[1-4])\\b", value, re.I):
+    if re.search(r"<\s*(?:table|p|div|h[1-4])\\b", value, re.I):
         parser = _RichContentParser()
         parser.feed(value)
         blocks = parser.finish()
@@ -190,11 +190,11 @@ def _content_blocks(content: str) -> list[dict[str, Any]]:
             continue
 
         # Consecutive tab-separated lines form a table when at least two columns exist.
-        if "\\t" in line:
+        if "\t" in line:
             flush_paragraph()
             rows = []
-            while index < len(lines) and "\\t" in lines[index]:
-                rows.append([cell.strip() for cell in lines[index].split("\\t")])
+            while index < len(lines) and "\t" in lines[index]:
+                rows.append([cell.strip() for cell in lines[index].split("\t")])
                 index += 1
             width = max(len(row) for row in rows)
             rows = [row + [""] * (width - len(row)) for row in rows]
