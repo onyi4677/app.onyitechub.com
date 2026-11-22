@@ -151,7 +151,7 @@ def _is_separator_row(line: str) -> bool:
 def _content_blocks(content: str) -> list[dict[str, Any]]:
     """Convert stored content to text/table blocks without flattening grids."""
     value = content.replace("\r\n", "\n").replace("\r", "\n")
-    if re.search(r"<\s*(?:table|p|div|h[1-4])\\b", value, re.I):
+    if re.search(r"<\s*(?:table|p|div|h[1-4])\b", value, re.I):
         parser = _RichContentParser()
         parser.feed(value)
         blocks = parser.finish()
