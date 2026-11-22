@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Nav from "../../../../components/nav";
+import RichManuscriptEditor from "../../../../components/rich-manuscript-editor";
 import {
   collectManuscriptSources,
   createManuscriptVersion,
@@ -380,14 +381,13 @@ export default function ManuscriptDevelopmentPage() {
                   onChange={(event) => setSectionDraft({ ...sectionDraft, title: event.target.value })}
                   maxLength={300}
                 />
-                <label htmlFor="manuscript-section-content">Section text</label>
-                <textarea
-                  id="manuscript-section-content"
+                <label htmlFor="manuscript-section-content">Section content</label>
+                <p className="muted">You can paste tables directly from Microsoft Word. The editor keeps table rows and columns as a table instead of flattening them into text.</p>
+                <RichManuscriptEditor
                   value={sectionDraft.content}
-                  onChange={(event) => setSectionDraft({ ...sectionDraft, content: event.target.value })}
-                  rows={18}
-                  maxLength={250000}
+                  onChange={(content) => setSectionDraft({ ...sectionDraft, content })}
                   placeholder="Write or paste researcher-reviewed content here. Do not enter unsupported findings or references."
+                  maxLength={250000}
                 />
                 <label htmlFor="manuscript-section-status">Review status</label>
                 <select
