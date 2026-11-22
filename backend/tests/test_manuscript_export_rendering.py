@@ -67,5 +67,41 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         self.assertIn("[Section not yet drafted]", xml)
 
 
+
+    def test_html_table_becomes_native_docx_table(self):
+        sections = [{
+            "section_id": "results", "title": "Results", "order": 1, "status": "draft",
+            "content": '<p>Intro paragraph.</p><table><tr><th>Study</th><th>Location</th></tr><tr><td>Ibrahim et al. (2023)</td><td>Yobe</td></tr><tr><td>Agu et al. (2022)</td><td>Taraba</td></tr></table>',
+        }]
+        from docx import Document
+        document = Document(BytesIO(render_docx("HTML table", sections)))
+        self.assertEqual(len(document.tables), 1)
+        self.assertEqual(len(document.tables[0].rows), 3)
+        self.assertEqual(len(document.tables[0].columns), 2)
+        self.assertEqual(document.tables[0].cell(1, 0).text, "Ibrahim et al. (2023)")
+        self.assertEqual(document.tables[0].cell(2, 1).text, "Taraba")
+
+    def test_markdown_table_becomes_native_docx_table(self):
+        sections = [{
+            "section_id": "results", "title": "Results", "order": 1, "status": "draft",
+            "content": "| Study | Location |\\n|---|---|\\n| Ibrahim et al. (2023) | Yobe |\\n| Agu et al. (2022) | Taraba |",
+        }]
+        from docx import Document
+        document = Document(BytesIO(render_docx("Markdown table", sections)))
+        self.assertEqual(len(document.tables), 1)
+        self.assertEqual(document.tables[0].cell(2, 0).text, "Agu et al. (2023)")
+
+    def test_pdf_table_text_remains_extractable(self):
+        sections = [{
+            "section_id": "results", "title": "Results", "order": 1, "status": "draft",
+            "content": '<table><tr><th>Study</th><th>Location</th></tr><tr><td>Ibrahim et al. (2023)</td><td>Yobe</td></tr></table>',
+        }]
+        from pypdf import PdfReader
+        pdf = PdfReader(BytesIO(render_pdf("PDF table", sections)))
+        text = "\\n".join(page.extract_text() or "" for page in pdf.pages)
+        self.assertIn("Ibrahim et al. (2023)", text)
+        self.assertIn("Yobe", text)
+
+
 if __name__ == "__main__":
     unittest.main()
