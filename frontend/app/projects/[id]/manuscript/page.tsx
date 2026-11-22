@@ -184,7 +184,9 @@ export default function ManuscriptDevelopmentPage() {
       const result = await exportManuscript(id, format);
       window.location.assign(result.download_url);
       setSectionMessage(
-        `${format.toUpperCase()} export generated. The secure download link expires in ${Math.round(result.download_url_expires_in / 60)} minutes.`
+        result.retention_warning
+          ? `${format.toUpperCase()} export generated. The secure download link expires in ${Math.round(result.download_url_expires_in / 60)} minutes. ${result.retention_warning}`
+          : `${format.toUpperCase()} export generated. The secure download link expires in ${Math.round(result.download_url_expires_in / 60)} minutes.`
       );
     } catch (err) {
       setSectionError(err instanceof Error ? err.message : `Unable to export the manuscript as ${format.toUpperCase()}.`);
