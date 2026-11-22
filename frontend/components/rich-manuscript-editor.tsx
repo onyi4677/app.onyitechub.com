@@ -77,7 +77,7 @@ function sanitizeHtml(html: string): string {
 
 function plainTextToHtml(value: string): string {
   const root = document.createElement("div");
-  const lines = value.replace(/\\r\\n?/g, "\\n").split("\\n");
+  const lines = value.replace(/\r\n?/g, "\n").split("\n");
   let index = 0;
   while (index < lines.length) {
     const line = lines[index];
@@ -85,17 +85,19 @@ function plainTextToHtml(value: string): string {
       index += 1;
       continue;
     }
-    if (line.includes("\\t")) {
+    if (line.includes("\t")) {
       const table = document.createElement("table");
       const body = document.createElement("tbody");
-      while (index < lines.length && lines[index].includes("\\t")) {
+      let rowIndex = 0;
+      while (index < lines.length && lines[index].includes("\t")) {
         const row = document.createElement("tr");
-        lines[index].split("\\t").forEach((cell, cellIndex) => {
-          const element = document.createElement(index === 0 && cellIndex >= 0 ? "td" : "td");
+        lines[index].split("\t").forEach((cell) => {
+          const element = document.createElement(rowIndex === 0 ? "th" : "td");
           element.textContent = cell.trim();
           row.appendChild(element);
         });
         body.appendChild(row);
+        rowIndex += 1;
         index += 1;
       }
       table.appendChild(body);
@@ -103,7 +105,7 @@ function plainTextToHtml(value: string): string {
       continue;
     }
     const paragraphLines: string[] = [];
-    while (index < lines.length && lines[index].trim() && !lines[index].includes("\\t")) {
+    while (index < lines.length && lines[index].trim() && !lines[index].includes("\t")) {
       paragraphLines.push(lines[index]);
       index += 1;
     }
