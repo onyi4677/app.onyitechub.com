@@ -8,6 +8,7 @@ import {
   collectManuscriptSources,
   createManuscriptVersion,
   createManuscriptWorkspace,
+  exportManuscript,
   getManuscriptWorkspace,
   getCurrentManuscript,
   getManuscriptSourceSnapshot,
@@ -41,6 +42,7 @@ export default function ManuscriptDevelopmentPage() {
   const [sectionSaving, setSectionSaving] = useState(false);
   const [sectionMessage, setSectionMessage] = useState("");
   const [sectionError, setSectionError] = useState("");
+  const [exportBusy, setExportBusy] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -161,6 +163,33 @@ export default function ManuscriptDevelopmentPage() {
       setSectionError(err instanceof Error ? err.message : "Unable to save section.");
     } finally {
       setSectionSaving(false);
+    }
+  }
+
+  async function handleExport(format: "docx" | "pdf") {
+    if (!currentManuscript?.version) return;
+    setExportBusy(true);
+    setSectionError("");
+    setSectionMessage("");
+    try {
+      // Save the currently open section first so the export includes the latest editor text.
+      if (sectionDraft) {
+        const saved = await saveManuscriptSection(id, currentManuscript.version.version_id, sectionDraft);
+        setCurrentManuscript((previous) => previous ? {
+          ...previous,
+          sections: previous.sections.map((item) => item.section_id === saved.section_id ? saved : item),
+        } : previous);
+        setSectionDraft(saved);
+      }
+      const result = await exportManuscript(id, format);
+      window.location.assign(result.download_url);
+      setSectionMessage(
+        `${format.toUpperCase()} export generated. The secure download link expires in ${Math.round(result.download_url_expires_in / 60)} minutes.`
+      );
+    } catch (err) {
+      setSectionError(err instanceof Error ? err.message : `Unable to export the manuscript as ${format.toUpperCase()}.`);
+    } finally {
+      setExportBusy(false);
     }
   }
 
@@ -316,6 +345,15 @@ export default function ManuscriptDevelopmentPage() {
             <p><strong>Version status:</strong> {currentManuscript.version.status}</p>
             <p><strong>Linked source snapshot:</strong> {currentManuscript.version.source_snapshot_id}</p>
             <p className="muted">Choose a section, edit its text and save it independently. No AI-generated text is inserted. Use the linked research modules and snapshot as evidence; mark gaps rather than inventing information.</p>
+            <div className="actions">
+              <button className="button primary" type="button" onClick={() => handleExport("docx")} disabled={exportBusy || sectionSaving}>
+                {exportBusy ? "Preparing export..." : "Export Word (.docx)"}
+              </button>
+              <button className="button" type="button" onClick={() => handleExport("pdf")} disabled={exportBusy || sectionSaving}>
+                {exportBusy ? "Preparing export..." : "Export PDF"}
+              </button>
+            </div>
+            <p className="muted">Exports use the saved current manuscript version. The open section is saved immediately before export. Download links are temporary; save the file to your device.</p>
             <div className="grid" style={{ gridTemplateColumns: "minmax(190px, 0.8fr) minmax(0, 2fr)", gap: 20 }}>
               <div>
                 <h4>Sections</h4>
