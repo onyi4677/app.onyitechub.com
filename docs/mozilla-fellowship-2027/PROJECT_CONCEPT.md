@@ -2,10 +2,10 @@
 ## Project Concept: Community-Governed AI Infrastructure for African Research
 
 **Applicant:** Onyemaechi Favour Wisdom  
-**Proposed track:** Independent Fellow  
+**Proposed track:** Embedded Fellow — Slum & Rural Health Initiative (SRHI)  
 **Technology organisation:** Onyitech JournalHub Ltd  
 **Status:** Working concept for the December 2026 Letter of Intent (LOI)  
-**Last updated:** 14 November 2026
+**Last updated:** 24 November 2026
 
 > This is an early project concept, not a submitted application, confirmed partnership, or final commitment. All proposed activities, partners, and outputs remain subject to refinement and feasibility checks.
 
@@ -63,17 +63,18 @@ The precise scope and deliverables will be agreed after consultation and a feasi
 
 Onyitech Research Workspace, developed by Onyitech JournalHub Ltd, provides an existing technical foundation and demonstrates the applicant's experience building and deploying research technology.
 
-As of November 2026, seven of its twelve planned modules are operational:
+As of 24 November 2026, eight of its twelve planned modules are operational:
 
 1. Research Foundation.
 2. Literature and Evidence.
 3. Reference and Citation.
 4. Research Design and Methodology.
-5. Screening.
-6. Instrument and Data Collection.
-7. Integrity and Review.
+5. Instrument and Data Collection.
+6. Manuscript Development.
+7. Research Integrity & Quality.
+8. Study Screening.
 
-Five further modules are under development. The applicant intends to make all twelve modules operational before January 2027. This is a development target, not a claim that all modules are already complete.
+Four further modules are under development. The applicant intends to complete the remaining four modules. Any completion date should be presented as a development target, not a claim that those modules are already operational.
 
 The Integrity and Review module combines deterministic Python-based checks with AI-assisted manuscript analysis using Amazon Bedrock Nova 2 Lite. The AI-assisted review is advisory; it does not establish plagiarism, misconduct or publication readiness.
 
