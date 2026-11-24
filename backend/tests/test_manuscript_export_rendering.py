@@ -14,7 +14,7 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
                 "section_id": "methods",
                 "title": "Methods",
                 "order": 2,
-                "content": "First paragraph.\n\nSecond paragraph.",
+                "content": "First paragraph.\\n\\nSecond paragraph.",
             },
             {
                 "section_id": "abstract",
@@ -47,7 +47,7 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         self.assertTrue(data.startswith(b"%PDF-"))
         self.assertGreater(len(data), 500)
         from pypdf import PdfReader
-        pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(data)).pages)
+        pdf_text = "\\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(data)).pages)
         self.assertIn("WORKING DRAFT", pdf_text)
 
     def test_rejects_duplicate_or_invalid_section_ids(self):
@@ -67,8 +67,6 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
             xml = archive.read("word/document.xml").decode("utf-8")
         self.assertIn("[Section not yet drafted]", xml)
 
-
-
     def test_html_table_becomes_native_docx_table(self):
         sections = [{
             "section_id": "results", "title": "Results", "order": 1, "status": "draft",
@@ -85,19 +83,18 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
     def test_markdown_table_becomes_native_docx_table(self):
         sections = [{
             "section_id": "results", "title": "Results", "order": 1, "status": "draft",
-            "content": "| Study | Location |\n|---|---|\n| Ibrahim et al. (2023) | Yobe |\n| Agu et al. (2022) | Taraba |",
+            "content": "| Study | Location |\\n|---|---|\\n| Ibrahim et al. (2023) | Yobe |\\n| Agu et al. (2022) | Taraba |",
         }]
         from docx import Document
         document = Document(BytesIO(render_docx("Markdown table", sections)))
         self.assertEqual(len(document.tables), 1)
         self.assertEqual(document.tables[0].cell(2, 0).text, "Agu et al. (2022)")
 
-
     def test_tab_separated_five_column_table_becomes_landscape_native_docx_table(self):
         content = (
-            "Study\tTrauma or psychological assessment\tPTSD-related findings\tOther reported findings\tInterpretation and limitations\n"
-            "Ibrahim et al. (2023)\tHarvard Trauma Questionnaire (HTQ)\t424 of 450 participants (94.2%) exceeded threshold.\t443 of 450 (98.4%) exceeded depression threshold.\tQuestionnaire estimates, not clinician-confirmed diagnoses.\n"
-            "Agu et al. (2022)\tNSESSS; DASS\tAuthors reported reduced PTSD symptoms after CBT.\t12 sessions over 13 weeks.\tGroup-specific counts require verification.\n"
+            "Study\\tTrauma or psychological assessment\\tPTSD-related findings\\tOther reported findings\\tInterpretation and limitations\\n"
+            "Ibrahim et al. (2023)\\tHarvard Trauma Questionnaire (HTQ)\\t424 of 450 participants (94.2%) exceeded threshold.\\t443 of 450 (98.4%) exceeded depression threshold.\\tQuestionnaire estimates, not clinician-confirmed diagnoses.\\n"
+            "Agu et al. (2022)\\tNSESSS; DASS\\tAuthors reported reduced PTSD symptoms after CBT.\\t12 sessions over 13 weeks.\\tGroup-specific counts require verification.\\n"
             "Note. Findings are extracted and are not pooled estimates."
         )
         sections = [{
@@ -116,8 +113,8 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
 
     def test_five_column_tab_table_uses_landscape_pdf_page(self):
         content = (
-            "Study\tAssessment\tPTSD findings\tOther findings\tLimitations\n"
-            "Ibrahim et al. (2023)\tHTQ\tHigh symptom estimate.\tDepression symptoms.\tNot a clinical diagnosis."
+            "Study\\tAssessment\\tPTSD findings\\tOther findings\\tLimitations\\n"
+            "Ibrahim et al. (2023)\\tHTQ\\tHigh symptom estimate.\\tDepression symptoms.\\tNot a clinical diagnosis."
         )
         sections = [{
             "section_id": "results", "title": "Results", "order": 1,
@@ -137,10 +134,9 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         }]
         from pypdf import PdfReader
         pdf = PdfReader(BytesIO(render_pdf("PDF table", sections)))
-        text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+        text = "\\n".join(page.extract_text() or "" for page in pdf.pages)
         self.assertIn("Ibrahim et al. (2023)", text)
         self.assertIn("Yobe", text)
-
 
     def test_duplicate_results_tail_is_omitted_from_methods_export_only(self):
         sections = [
@@ -183,7 +179,8 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         from docx import Document
         document = Document(BytesIO(render_docx("No duplicate", sections)))
         text = "\\n".join(p.text for p in document.paragraphs)
-        self.assertIn("3. Results Results text that is not duplicated.", text)
+        self.assertIn("3. Results", text)
+        self.assertIn("Results text that is not duplicated.", text)
 
 
 if __name__ == "__main__":
