@@ -142,5 +142,49 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         self.assertIn("Yobe", text)
 
 
+    def test_duplicate_results_tail_is_omitted_from_methods_export_only(self):
+        sections = [
+            {
+                "section_id": "methods", "title": "Methods", "order": 2,
+                "content": (
+                    "<p>Eligibility criteria were applied.</p>"
+                    "<p>Studies failing the criteria were excluded.</p>"
+                    "<h2>3. Results</h2>"
+                    "<p>3.1 Study selection</p>"
+                    "<table><tr><th>Study</th><th>Finding</th></tr>"
+                    "<tr><td>Repeated study</td><td>Repeated finding</td></tr></table>"
+                ),
+            },
+            {
+                "section_id": "results", "title": "Results", "order": 3,
+                "content": (
+                    "<p>3.1 Study selection</p>"
+                    "<table><tr><th>Study</th><th>Finding</th></tr>"
+                    "<tr><td>Repeated study</td><td>Repeated finding</td></tr></table>"
+                ),
+            },
+        ]
+        from docx import Document
+        document = Document(BytesIO(render_docx("Duplicate test", sections)))
+        self.assertEqual(len(document.tables), 1)
+        paragraphs = "\\n".join(p.text for p in document.paragraphs)
+        self.assertIn("Eligibility criteria were applied.", paragraphs)
+        self.assertIn("Studies failing the criteria were excluded.", paragraphs)
+        self.assertNotIn("3. Results", paragraphs)
+        # The input records remain unchanged; only the export representation is filtered.
+        self.assertIn("<h2>3. Results</h2>", sections[0]["content"])
+        self.assertEqual(sections[0]["content"].count("<table>"), 1)
+
+    def test_duplicate_results_tail_is_kept_when_no_results_section_exists(self):
+        sections = [{
+            "section_id": "methods", "title": "Methods", "order": 1,
+            "content": "Methods text.\\n3. Results\\nResults text that is not duplicated.",
+        }]
+        from docx import Document
+        document = Document(BytesIO(render_docx("No duplicate", sections)))
+        text = "\\n".join(p.text for p in document.paragraphs)
+        self.assertIn("3. Results Results text that is not duplicated.", text)
+
+
 if __name__ == "__main__":
     unittest.main()
