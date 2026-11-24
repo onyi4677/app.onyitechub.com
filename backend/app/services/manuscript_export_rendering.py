@@ -56,6 +56,44 @@ def _ordered_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(sections, key=lambda item: (int(item.get("order", 0)), item["section_id"]))
 
 
+def _export_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Avoid exporting a duplicated Results chapter embedded in Methods.
+
+    Some saved workspaces contain the complete Results chapter twice: once
+    accidentally appended to Methods and once in the dedicated Results
+    section. Keep the saved records untouched, but omit the appended Methods
+    tail in the export when a separate Results section is present.
+    """
+    has_results_section = any(
+        re.sub(r"\\s+", " ", str(item.get("title", ""))).strip().casefold()
+        in {"results", "3. results"}
+        for item in sections
+    )
+    if not has_results_section:
+        return [dict(item) for item in sections]
+
+    cleaned: list[dict[str, Any]] = []
+    html_heading = re.compile(
+        r"(?is)<(?:h[1-6]|p|div)\\b[^>]*>\\s*(?:<[^>]+>\\s*)*"
+        r"3\\.\\s*results\\b.*$"
+    )
+    text_heading = re.compile(r"(?im)^\\s*3\\.\\s*results\\b.*$")
+    for item in sections:
+        copied = dict(item)
+        section_title = re.sub(
+            r"\\s+", " ", str(item.get("title", ""))
+        ).strip().casefold()
+        if section_title in {"methods", "2. methods"}:
+            content = str(item.get("content", ""))
+            if re.search(r"<\\s*(?:table|p|div|h[1-6])\\b", content, re.I):
+                content = html_heading.sub("", content)
+            else:
+                content = text_heading.sub("", content)
+            copied["content"] = content.rstrip()
+        cleaned.append(copied)
+    return cleaned
+
+
 class _RichContentParser(HTMLParser):
     """Extract safe text blocks and native table grids from stored HTML."""
     BLOCK_TAGS = {"p", "div", "h1", "h2", "h3", "h4", "li"}
@@ -254,6 +292,7 @@ def render_docx(
 ) -> bytes:
     """Render saved sections with native Word tables for structured content."""
     _validate(title, sections)
+    sections = _export_sections(sections)
     generated = generated_at or datetime.now(timezone.utc)
     document = Document()
     # Wide evidence tables need landscape pages to remain readable in Word.
@@ -340,6 +379,7 @@ def render_pdf(
 ) -> bytes:
     """Render text and structured tables using ReportLab Platypus."""
     _validate(title, sections)
+    sections = _export_sections(sections)
     generated = generated_at or datetime.now(timezone.utc)
     output = BytesIO()
     has_wide_table = any(
