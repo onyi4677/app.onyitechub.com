@@ -65,7 +65,7 @@ def _export_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
     tail in the export when a separate Results section is present.
     """
     has_results_section = any(
-        re.sub(r"\\s+", " ", str(item.get("title", ""))).strip().casefold()
+        re.sub(r"\s+", " ", str(item.get("title", ""))).strip().casefold()
         in {"results", "3. results"}
         for item in sections
     )
@@ -74,18 +74,18 @@ def _export_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     cleaned: list[dict[str, Any]] = []
     html_heading = re.compile(
-        r"(?is)<(?:h[1-6]|p|div)\\b[^>]*>\\s*(?:<[^>]+>\\s*)*"
-        r"3\\.\\s*results\\b.*$"
+        r"(?is)<(?:h[1-6]|p|div)\b[^>]*>\s*(?:<[^>]+>\s*)*"
+        r"3\.\s*results\b.*$"
     )
-    text_heading = re.compile(r"(?im)^\\s*3\\.\\s*results\\b.*$")
+    text_heading = re.compile(r"(?im)^\s*3\.\s*results\b.*$")
     for item in sections:
         copied = dict(item)
         section_title = re.sub(
-            r"\\s+", " ", str(item.get("title", ""))
+            r"\s+", " ", str(item.get("title", ""))
         ).strip().casefold()
         if section_title in {"methods", "2. methods"}:
             content = str(item.get("content", ""))
-            if re.search(r"<\\s*(?:table|p|div|h[1-6])\\b", content, re.I):
+            if re.search(r"<\s*(?:table|p|div|h[1-6])\b", content, re.I):
                 content = html_heading.sub("", content)
             else:
                 content = text_heading.sub("", content)
