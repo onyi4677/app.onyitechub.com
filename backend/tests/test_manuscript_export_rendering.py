@@ -277,12 +277,12 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         methods_html = (
             "<p>2.8 Transparency of the review process</p>"
             "<p>Audit trail retained for verification.</p>"
-            "<p>3\\\\. Results</p>"
+            "<p>3\\. Results</p>"
             "<p>3.1 Study selection</p>"
             "<table><tr><th>Study</th></tr><tr><td>Repeated study</td></tr></table>"
         )
         results_html = (
-            "<p>3\\\\. Results</p>"
+            "<p>3\\. Results</p>"
             "<p>3.1 Study selection</p>"
             "<table><tr><th>Study</th></tr><tr><td>Repeated study</td></tr></table>"
         )
@@ -293,8 +293,8 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         exported = _export_sections(sections)
         self.assertIn("2.8 Transparency", exported[0]["content"])
         self.assertIn("Audit trail retained", exported[0]["content"])
-        self.assertNotIn("3\\\\. Results", exported[0]["content"])
-        self.assertIn("3\\\\. Results", exported[1]["content"])
+        self.assertNotIn("3\\. Results", exported[0]["content"])
+        self.assertIn("3\\. Results", exported[1]["content"])
         self.assertEqual(sections[0]["content"], methods_html)
 
 if __name__ == "__main__":
