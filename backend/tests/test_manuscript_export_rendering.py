@@ -218,5 +218,59 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         self.assertIn("Results text that is not duplicated.", text)
 
 
+
+    def test_duplicate_results_tail_starting_at_31_is_removed_from_docx(self):
+        methods_html = (
+            "<p>Eligibility criteria were applied.</p>"
+            "<p>Studies failing the criteria were excluded.</p>"
+            "<p>3.1 Study selection</p>"
+            "<table><tr><th>Study</th><th>Finding</th></tr>"
+            "<tr><td>Repeated study</td><td>Repeated finding</td></tr></table>"
+        )
+        results_html = (
+            "<p>3.1 Study selection</p>"
+            "<table><tr><th>Study</th><th>Finding</th></tr>"
+            "<tr><td>Repeated study</td><td>Repeated finding</td></tr></table>"
+        )
+        sections = [
+            {"section_id": "methods", "title": "Methods", "order": 2, "content": methods_html},
+            {"section_id": "results", "title": "Results", "order": 3, "content": results_html},
+        ]
+        from docx import Document
+        document = Document(BytesIO(render_docx("Actual structure", sections)))
+        paragraphs = "\\n".join(p.text for p in document.paragraphs)
+        self.assertEqual(len(document.tables), 1)
+        self.assertIn("Eligibility criteria were applied.", paragraphs)
+        self.assertIn("Studies failing the criteria were excluded.", paragraphs)
+        self.assertEqual(paragraphs.count("3.1 Study selection"), 1)
+        self.assertEqual(sections[0]["content"], methods_html)
+
+    def test_duplicate_results_tail_starting_at_31_is_removed_from_pdf(self):
+        methods_html = (
+            "<p>Eligibility criteria were applied.</p>"
+            "<p>Studies failing the criteria were excluded.</p>"
+            "<p>3.1 Study selection</p>"
+            "<table><tr><th>Study</th><th>Finding</th></tr>"
+            "<tr><td>Repeated study</td><td>Repeated finding</td></tr></table>"
+        )
+        results_html = (
+            "<p>3.1 Study selection</p>"
+            "<table><tr><th>Study</th><th>Finding</th></tr>"
+            "<tr><td>Repeated study</td><td>Repeated finding</td></tr></table>"
+        )
+        sections = [
+            {"section_id": "methods", "title": "Methods", "order": 2, "content": methods_html},
+            {"section_id": "results", "title": "Results", "order": 3, "content": results_html},
+        ]
+        from pypdf import PdfReader
+        pdf = PdfReader(BytesIO(render_pdf("Actual structure", sections)))
+        extracted = " ".join("\\n".join(page.extract_text() or "" for page in pdf.pages).split())
+        self.assertEqual(extracted.count("Repeated study"), 1)
+        self.assertEqual(extracted.count("Repeated finding"), 1)
+        self.assertIn("Eligibility criteria were applied.", extracted)
+        self.assertIn("Studies failing the criteria were excluded.", extracted)
+        self.assertEqual(extracted.count("3.1 Study selection"), 1)
+        self.assertEqual(sections[0]["content"], methods_html)
+
 if __name__ == "__main__":
     unittest.main()
