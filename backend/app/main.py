@@ -2,11 +2,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
+from app.api.manuscript_routes import router as manuscript_router
 from app.api.integrity_routes import router as integrity_router
 from app.api.instrument_review_routes import router as instrument_review_router
 from app.api.participant_publication_routes import router as participant_publication_router
 from app.api.research_publication_routes import router as research_publication_router
 from app.services.integrity_submissions import cleanup_expired_submissions
+from app.services.manuscript_storage import cleanup_expired_workspaces
 from mangum import Mangum
 
 app = FastAPI(
@@ -44,6 +46,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(manuscript_router)
 app.include_router(integrity_router)
 app.include_router(instrument_review_router)
 app.include_router(participant_publication_router)
@@ -72,6 +75,13 @@ def handler(event, context):
             and detail.get("task") == "integrity-retention-cleanup"
         ):
             return cleanup_expired_submissions()
+
+        if (
+            event.get("source") == "aws.events"
+            and isinstance(detail, dict)
+            and detail.get("task") == "manuscript-retention-cleanup"
+        ):
+            return cleanup_expired_workspaces()
 
         if event.get("source") == "onyitech.integrity":
             if not isinstance(detail, dict) or detail.get("task") != "ai-review":

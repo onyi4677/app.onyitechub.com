@@ -241,3 +241,25 @@ def get_module(
         return {}
 
     return module
+
+
+def get_module_read_only(project_id: str, module_key: str) -> dict[str, Any]:
+    """Read a module without triggering legacy Study Screening migration writes."""
+    if module_key != "study_screening" or not screening_storage_is_configured():
+        return get_module(project_id, module_key)
+
+    try:
+        response = projects_table.get_item(Key={"id": project_id}, ConsistentRead=True)
+    except ClientError as exc:
+        raise HTTPException(status_code=500, detail="Unable to retrieve project") from exc
+
+    project = response.get("Item")
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    stored = load_screening_storage(project_id)
+    if stored is not None:
+        return stored
+
+    modules = project.get("modules") or {}
+    return _legacy_screening_module(modules) or {}

@@ -9,6 +9,7 @@ on:
       - feat/project-linked-instrument-builder
       - feat/research-data-collection
       - feat/study-screening-excel-import
+      - feat/research-to-manuscript-engine
     paths:
       - "backend/**"
       - ".github/workflows/deploy-staging-lambda.yml"

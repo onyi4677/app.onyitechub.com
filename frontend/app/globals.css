@@ -13,3 +13,37 @@
 
 /* Keep the three manuscript assessments visually distinct. */
 .integrity-report{background:#fff}.integrity-citation-report{border-left:4px solid #64748b}.integrity-ai-review>.integrity-report{border-left:4px solid #64748b}.integrity-ai-review> .integrity-status{margin-bottom:8px}.integrity-report>strong{display:block;margin-bottom:8px}
+
+
+/* Rich manuscript editor: keep pasted Word tables visibly structured. */
+.rich-manuscript-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #7b8492;
+  pointer-events: none;
+}
+.rich-manuscript-editor table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  margin: 12px 0 18px;
+  font-size: 0.92em;
+}
+.rich-manuscript-editor th,
+.rich-manuscript-editor td {
+  border: 1px solid #9aa6b2;
+  padding: 7px 9px;
+  min-width: 48px;
+  vertical-align: top;
+  text-align: left;
+}
+.rich-manuscript-editor th {
+  background: #e8eef5;
+  color: #1d2b3a;
+  font-weight: 700;
+}
+.rich-manuscript-editor tr:nth-child(even) td {
+  background: #f7f9fb;
+}
+.rich-manuscript-editor p {
+  margin: 0 0 0.7em;
+}

@@ -864,3 +864,22 @@ def citation_integrity(
     )
 
     return report
+
+# ---------------------------------------------------------------------
+# Manuscript export
+# ---------------------------------------------------------------------
+
+class ManuscriptExportRequest(BaseModel):
+    format: str = Field(pattern=r"^(docx|pdf)$")
+
+
+@router.post("/projects/{project_id}/manuscript/export")
+def export_project_manuscript(
+    project_id: str,
+    payload: ManuscriptExportRequest,
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
+    _require_project_access(project_id, user)
+    from app.services.manuscript_exports import export_current_version
+
+    return export_current_version(project_id, user["sub"], payload.format)
