@@ -171,6 +171,41 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         self.assertIn("<h2>3. Results</h2>", sections[0]["content"])
         self.assertEqual(sections[0]["content"].count("<table>"), 1)
 
+    def test_duplicate_results_tail_is_omitted_from_pdf_export_only(self):
+        sections = [
+            {
+                "section_id": "methods", "title": "Methods", "order": 2,
+                "content": (
+                    "<p>Eligibility criteria were applied.</p>"
+                    "<p>Studies failing the criteria were excluded.</p>"
+                    "<h2>3. Results</h2>"
+                    "<p>3.1 Study selection</p>"
+                    "<table><tr><th>Study</th><th>Finding</th></tr>"
+                    "<tr><td>Repeated study</td><td>Repeated finding</td></tr></table>"
+                ),
+            },
+            {
+                "section_id": "results", "title": "Results", "order": 3,
+                "content": (
+                    "<p>3.1 Study selection</p>"
+                    "<table><tr><th>Study</th><th>Finding</th></tr>"
+                    "<tr><td>Repeated study</td><td>Repeated finding</td></tr></table>"
+                ),
+            },
+        ]
+        from pypdf import PdfReader
+        pdf = PdfReader(BytesIO(render_pdf("Duplicate test", sections)))
+        extracted = "\\n".join(page.extract_text() or "" for page in pdf.pages)
+        normalized = " ".join(extracted.split())
+        self.assertEqual(normalized.count("Repeated study"), 1)
+        self.assertEqual(normalized.count("Repeated finding"), 1)
+        self.assertIn("Eligibility criteria were applied.", normalized)
+        self.assertIn("Studies failing the criteria were excluded.", normalized)
+        self.assertEqual(normalized.count("3.1 Study selection"), 1)
+        # The saved Methods content remains unchanged.
+        self.assertIn("<h2>3. Results</h2>", sections[0]["content"])
+        self.assertEqual(sections[0]["content"].count("<table>"), 1)
+
     def test_duplicate_results_tail_is_kept_when_no_results_section_exists(self):
         sections = [{
             "section_id": "methods", "title": "Methods", "order": 1,
