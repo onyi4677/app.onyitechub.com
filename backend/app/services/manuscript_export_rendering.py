@@ -75,9 +75,9 @@ def _export_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
     cleaned: list[dict[str, Any]] = []
     html_heading = re.compile(
         r"(?is)<(?:h[1-6]|p|div)\b[^>]*>\s*(?:<[^>]+>\s*)*"
-        r"3\.\s*(?:results\b|1\s+study\s+selection\b).*$"
+        r"3\\?\.\s*(?:results\b|1\s+study\s+selection\b).*$"
     )
-    text_heading = re.compile(r"(?im)^\s*3\.\s*(?:results\b|1\s+study\s+selection\b).*$")
+    text_heading = re.compile(r"(?im)^\s*3\\?\.\s*(?:results\b|1\s+study\s+selection\b).*$")
     for item in sections:
         copied = dict(item)
         section_title = re.sub(

@@ -4,7 +4,7 @@ from io import BytesIO
 from docx.shared import Inches
 from zipfile import ZipFile
 
-from app.services.manuscript_export_rendering import render_docx, render_pdf
+from app.services.manuscript_export_rendering import render_docx, render_pdf, _export_sections
 
 
 class ManuscriptExportRenderingTests(unittest.TestCase):
@@ -270,6 +270,31 @@ class ManuscriptExportRenderingTests(unittest.TestCase):
         self.assertIn("Eligibility criteria were applied.", extracted)
         self.assertIn("Studies failing the criteria were excluded.", extracted)
         self.assertEqual(extracted.count("3.1 Study selection"), 1)
+        self.assertEqual(sections[0]["content"], methods_html)
+
+
+    def test_escaped_results_heading_is_removed_from_methods_export(self):
+        methods_html = (
+            "<p>2.8 Transparency of the review process</p>"
+            "<p>Audit trail retained for verification.</p>"
+            "<p>3\\\\. Results</p>"
+            "<p>3.1 Study selection</p>"
+            "<table><tr><th>Study</th></tr><tr><td>Repeated study</td></tr></table>"
+        )
+        results_html = (
+            "<p>3\\\\. Results</p>"
+            "<p>3.1 Study selection</p>"
+            "<table><tr><th>Study</th></tr><tr><td>Repeated study</td></tr></table>"
+        )
+        sections = [
+            {"section_id": "methods", "title": "Methods", "order": 2, "content": methods_html},
+            {"section_id": "results", "title": "Results", "order": 3, "content": results_html},
+        ]
+        exported = _export_sections(sections)
+        self.assertIn("2.8 Transparency", exported[0]["content"])
+        self.assertIn("Audit trail retained", exported[0]["content"])
+        self.assertNotIn("3\\\\. Results", exported[0]["content"])
+        self.assertIn("3\\\\. Results", exported[1]["content"])
         self.assertEqual(sections[0]["content"], methods_html)
 
 if __name__ == "__main__":

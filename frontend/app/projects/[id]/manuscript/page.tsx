@@ -384,6 +384,7 @@ export default function ManuscriptDevelopmentPage() {
                 <label htmlFor="manuscript-section-content">Section content</label>
                 <p className="muted">You can paste tables directly from Microsoft Word. The editor keeps table rows and columns as a table instead of flattening them into text.</p>
                 <RichManuscriptEditor
+                  key={selectedSectionId}
                   value={sectionDraft.content}
                   onChange={(content) => setSectionDraft({ ...sectionDraft, content })}
                   placeholder="Write or paste researcher-reviewed content here. Do not enter unsupported findings or references."
